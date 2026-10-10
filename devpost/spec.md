@@ -1,6 +1,6 @@
 ---
 doc: spec
-status: draft
+status: approved
 ---
 
 # SysPlanner (working name) — Technical Spec
@@ -77,7 +77,7 @@ Rationale:
 - **Gemini first, OpenAI slot** (learner's choice): a `Planner` interface with one Gemini implementation; `AI_PROVIDER` in `.env` picks it. The OpenAI file is a stub that raises "not implemented."
 - **Plain `sqlite3` and plain CSS** (implementation details I chose): each avoids one more library to learn. Pydantic already defines the shapes, and the app only has three tables.
 
-Checked against current docs during this session (Context7, `googleapis/python-genai`): structured output works by passing `response_mime_type="application/json"` and `response_json_schema=MyModel.model_json_schema()` to `client.models.generate_content`. The alias `gemini-flash-latest` always points to the newest Flash model, and `gemini-2.5-pro` / `gemini-pro-latest` exist. **Still to verify early in the build:** your key's current free-tier rate limits (https://ai.google.dev/gemini-api/docs/rate-limits), and whether Flash's plans are good enough or Pro is needed (see **Decisions and Open Issues**).
+Checked against current docs during this session (Context7, `googleapis/python-genai`): structured output works by passing `response_mime_type="application/json"` and `response_json_schema=MyModel.model_json_schema()` to `client.models.generate_content`. The alias `gemini-flash-latest` always points to the newest Flash model, and `gemini-2.5-pro` / `gemini-pro-latest` exist. **Still to verify early in the build:** the real cost of one call on your paid key (see **Gemini API > Cost**), and whether Flash's plans are good enough or Pro is needed (see **Decisions and Open Issues**).
 
 ## Where It Runs and How Someone Tries It
 
@@ -129,87 +129,85 @@ CSS variables in `frontend/src/styles/theme.css`:
 
 ## Components
 
+### The Big Picture
+
+The whole app is six pieces. Each has one job.
+
+```mermaid
+flowchart LR
+  UI["Frontend<br/>(React screens)"] -- "/api/..." --> R
+  subgraph Backend ["Backend (FastAPI)"]
+    R["API Routes"] --> S["Services<br/>(the rules)"]
+    S --> P["Planner<br/>(asks the AI)"]
+    S --> V["Validation<br/>(checks AI replies)"]
+    S --> D["Store<br/>(reads/writes data)"]
+  end
+  P --> G[("Gemini")]
+  D --> F[("sysplanner.db")]
+```
+
+| Piece | Its one job | Lives in |
+|---|---|---|
+| Frontend | Shows the state and sends your clicks. Decides nothing. | `frontend/src/` |
+| API Routes | Receives requests and passes them to Services. | `backend/app/main.py` |
+| Services | Applies the rules for each action: set hours, add goal, tick, next day. | `backend/app/services.py` |
+| Planner | Asks the AI for a plan. | `backend/app/planner/` |
+| Validation | Rejects AI plans that break the rules. | `backend/app/validation.py` |
+| Store | Reads and writes the data file. | `backend/app/db.py` |
+
+Every action follows the same path: **Frontend → Routes → Services → (Planner → Validation) → Store → Frontend re-reads the state.** Only adding a goal and Next day go through the Planner.
+
+The sections below say a little more about each piece. The exact routes, prompt rules and validation rules are in **Build Reference**, further down. You don't need them to follow the design.
+
 ### Backend
 
 #### API Routes (`backend/app/main.py`)
-Thin HTTP layer: parses requests, calls the service functions, returns JSON, maps errors to status codes (409 for cap/precondition refusals, 502 for AI failure). Also serves `frontend/dist` as static files when it exists.
-
-| Method + path | Body | Returns | PRD ref |
-|---|---|---|---|
-| `GET /api/state` | — | full `AppState` (below) | all views |
-| `POST /api/settings` | `{weekly_hours: int}` | `AppState` | `prd.md > Weekly Time Budget` |
-| `POST /api/goals` | `{text, deadline}` | `{status:"impossible", message}` or `{status:"added", goal_id, state}` | `prd.md > Adding a Goal`, `prd.md > Goal Cap`, `prd.md > The System (Breakdown + Day-by-Day Plan)` |
-| `POST /api/tasks/{id}/toggle` | `{done: bool}` | `AppState` | `prd.md > Today and Marking Done` |
-| `POST /api/day/next` | — | `AppState` | `prd.md > Next Day, Review and Re-plan` |
-
-`AppState` = `{settings: {weekly_hours, current_day} | null, goals: [Goal with breakdown, tasks, last_change], today: [Task with goal_id/goal_text]}`. The frontend re-reads the whole state after every action. With at most 3 goals that's small, and it means the screen can never drift from the database.
+Five endpoints, one per action, plus `GET /api/state` to read everything. Does no thinking itself. It also serves the built frontend for the one-command demo. PRD ref: all views.
 
 #### Services (`backend/app/services.py`)
-All the rules, one function per action: `set_weekly_hours`, `add_goal`, `toggle_task`, `next_day`. Each one loads what it needs from the store, calls the planner if needed, runs validation, and saves in a single transaction.
-- `add_goal` refuses (no AI call) if there are already 3 goals or weekly hours aren't set.
-- `next_day` skips the AI entirely when nothing is unticked.
-- `toggle_task` only allows tasks on the current day.
+One function per action. Each one loads what it needs, calls the Planner if needed, runs Validation and saves everything in one go (or saves nothing). The three guard rules:
+- Adding a goal is refused without an AI call when there are already 3 goals.
+- Next day skips the AI when nothing was missed.
+- Ticking only works on the current day.
 
 PRD ref: `prd.md > Goal Cap`, `prd.md > Next Day, Review and Re-plan`, `prd.md > States and Boundaries`.
 
 #### Planner Layer (`backend/app/planner/`)
-- `base.py`: the `Planner` protocol, with two methods:
-  - `plan_new_goal(ctx) -> NewGoalPlan`, used when adding a goal.
-  - `replan(ctx) -> Replan`, used after misses.
-
-  `get_planner()` reads `AI_PROVIDER` from `.env`.
-- `gemini.py`: builds the prompt (from `prompts.py`), calls `client.models.generate_content(model=GEMINI_MODEL, contents=prompt, config=GenerateContentConfig(response_mime_type="application/json", response_json_schema=Schema.model_json_schema()))`, and parses with `Schema.model_validate_json(response.text)`.
-- `openai.py`: stub; raises `NotImplementedError("OpenAI planner not built yet")`.
-- `fake.py`: returns fixed, hand-written plans for tests; can be told to return impossible, rule-breaking or failing replies.
-- `prompts.py`: the instructions sent with every call. The prompt tells the AI to:
-  - build workstreams with time budgets, then derive daily tasks from them;
-  - size the plan to the goal, not the deadline;
-  - surface long-lead steps (things that depend on other people);
-  - give every task a done criterion, minutes and a why;
-  - plan jointly with the other goals and merge shared work where sensible;
-  - stay within the weekly hours;
-  - be honest about feasibility (impossible vs. stretch vs. comfortable);
-  - write change notes in calm, plain words naming days and tasks and saying whether the deadline is still met.
-
-PRD ref: `prd.md > The System (Breakdown + Day-by-Day Plan)`, `prd.md > Adding a Goal`, `prd.md > Last Change Note`.
+Builds the prompt, calls the AI and returns a plan in a fixed shape. There are three interchangeable versions: **Gemini** (the real one), **OpenAI** (an empty slot) and **Fake** (canned plans so tests don't need the AI). `.env` picks which one runs. PRD ref: `prd.md > The System (Breakdown + Day-by-Day Plan)`, `prd.md > Adding a Goal`, `prd.md > Last Change Note`.
 
 #### Validation (`backend/app/validation.py`)
-`check_plan(ctx, reply) -> list[str]`: returns plain-language problems, empty if fine. Rules:
-- every task has a non-empty title, done criterion and why, and `minutes > 0`;
-- dates are on or after the plan's start day and on or before the goal's deadline;
-- every goal referenced exists, and every changed goal has a change note;
-- **weekly budget:** for each Monday–Sunday week, total minutes across all goals (including the one being added) ≤ `weekly_hours × 60`.
-
-On problems, the service calls the planner once more with the problems appended to the prompt. If the second reply still fails, it raises `PlanningFailed` (HTTP 502). PRD ref: `prd.md > Weekly Time Budget`, `prd.md > The System (Breakdown + Day-by-Day Plan)`.
+Checks every AI plan against the rules: complete tasks, dates inside the deadline, weekly hours not exceeded. If a plan fails, the AI gets one retry with the problems listed. If it fails again, you see the calm "planning failed" message and nothing changes. PRD ref: `prd.md > Weekly Time Budget`, `prd.md > The System (Breakdown + Day-by-Day Plan)`.
 
 #### Store (`backend/app/db.py`)
-Opens `data/sysplanner.db` (creating the folder and tables on first run), plus small query helpers and a `transaction()` context manager. Tests use a temporary database file. PRD ref: `prd.md > Open Questions` (data across sessions).
+Opens the SQLite file (and creates it on first run) and saves all-or-nothing. Tests use a throwaway copy. PRD ref: `prd.md > Open Questions` (data across sessions).
 
 ### Frontend
 
-#### App Shell (`frontend/src/App.tsx`, `api.ts`)
-Loads `AppState` on start and keeps it in one piece of React state. Decides which main view to show: weekly-hours step, empty state, Today, or a Goal view. Holds the shared "planning…" and error state. `api.ts` has one typed function per backend route; `types.ts` mirrors the backend shapes by hand.
+`App.tsx` holds the app state and picks which view to show. Every other piece just displays part of that state or sends one action.
+
+#### App Shell (`frontend/src/App.tsx`, `api.ts`, `types.ts`)
+Loads the state, picks the view (weekly-hours step, empty state, Today or a Goal view) and holds the "planning…" and error state. `api.ts` has one function per route.
 
 #### Weekly Hours Step (`WeeklyHoursStep.tsx`)
-Shown when `settings` is null; a single number field and Continue. PRD ref: `prd.md > Weekly Time Budget`.
+One number field and Continue, shown on first open. PRD ref: `prd.md > Weekly Time Budget`.
 
 #### Sidebar (`Sidebar.tsx`)
-**Today** link, the list of goals (with the gold active marker), and **Add goal**. Add goal is disabled with a short reason when there are 3 goals. Clicking it anyway at the cap shows the plain refusal. PRD ref: `prd.md > Screens and Layout`, `prd.md > Goal Cap`.
+Today, your goals, and **Add goal** (disabled with a reason at 3 goals). PRD ref: `prd.md > Screens and Layout`, `prd.md > Goal Cap`.
 
 #### Add Goal Dialog (`AddGoalDialog.tsx`)
-Goal text + required date. On submit it shows "Planning your system…". If the reply is impossible, it shows the AI's message and keeps the dialog open with the deadline field focused for a new date. When the goal is added, it closes and opens the new goal's Goal view. PRD ref: `prd.md > Adding a Goal`.
+Goal text and deadline. If the goal is impossible, it shows the AI's message and asks for a new date. Once the goal is added, it opens the new goal's view. PRD ref: `prd.md > Adding a Goal`.
 
 #### Today View (`TodayView.tsx`, `TaskCard.tsx`)
-Today's date and tasks across active goals. Each card shows the goal label, what to do, the done criterion, the minutes and the why, plus a tick box. The **Next day** button sits at the bottom. If the main area is empty, it shows the empty-state prompt. PRD ref: `prd.md > Today and Marking Done`, `prd.md > States and Boundaries`.
+Today's tasks across all goals, each with its done criterion, minutes, why and a tick box, plus the **Next day** button. PRD ref: `prd.md > Today and Marking Done`, `prd.md > States and Boundaries`.
 
 #### Goal View (`GoalView.tsx`, `Breakdown.tsx`, `DayPlan.tsx`, `LastChangeNote.tsx`)
-Goal text and deadline; the **breakdown** (workstreams with time per day/week and a one-line purpose); the **day-by-day plan** (grouped by date, past days dimmed, today highlighted in gold); and the **Last change** note ("No changes yet" when empty). PRD ref: `prd.md > The System (Breakdown + Day-by-Day Plan)`, `prd.md > Last Change Note`.
+The goal and its deadline, the breakdown into workstreams, the day-by-day plan (past days dimmed, today in gold) and the **Last change** note. PRD ref: `prd.md > The System (Breakdown + Day-by-Day Plan)`, `prd.md > Last Change Note`.
 
 #### End-of-Day Review (`ReviewDialog.tsx`)
-Lists today's unticked tasks with tick boxes ("Tick any you actually did") and a **Confirm** button that calls `next_day`. It shows "Re-planning…" while waiting. Skipped entirely when nothing is unticked. PRD ref: `prd.md > Next Day, Review and Re-plan`.
+Lists today's unticked tasks so you can tick any you actually did, then **Confirm** to re-plan. Skipped when nothing is unticked. PRD ref: `prd.md > Next Day, Review and Re-plan`.
 
 #### Planning Indicator and Error Notice (`PlanningIndicator.tsx`, `ErrorNotice.tsx`)
-A quiet working indicator during any AI call. On 502, a calm card: "Planning didn't work this time. Nothing was changed." with **Try again**, which repeats the last action. PRD ref: `prd.md > States and Boundaries`.
+A quiet pulsing dot while the AI works. If it fails, a calm "Nothing was changed" card with **Try again**. PRD ref: `prd.md > States and Boundaries`.
 
 ## Data Model
 
@@ -255,6 +253,8 @@ AI reply shapes (Pydantic, in `backend/app/models.py`):
 | Which view is open, dialog state | React state only | clicks | resets to Today (fine for the POC) |
 
 ## File Structure
+
+How to read it: `backend/app/` is the rules, `backend/app/planner/` is the AI, `backend/tests/` proves the rules, and `frontend/src/components/` is one file per screen piece. Everything else is setup.
 
 ```
 sysplanner/
@@ -311,14 +311,59 @@ sysplanner/
 └── README.md                  # setup, run, demo steps
 ```
 
+## Build Reference
+
+Exact details for `5-build`. The design is fully described above; this section is lookup material.
+
+### API Routes in Detail
+Errors map to status codes: 409 for cap and precondition refusals, 502 for AI failure.
+
+| Method + path | Body | Returns | PRD ref |
+|---|---|---|---|
+| `GET /api/state` | — | full `AppState` (below) | all views |
+| `POST /api/settings` | `{weekly_hours: int}` | `AppState` | `prd.md > Weekly Time Budget` |
+| `POST /api/goals` | `{text, deadline}` | `{status:"impossible", message}` or `{status:"added", goal_id, state}` | `prd.md > Adding a Goal`, `prd.md > Goal Cap`, `prd.md > The System (Breakdown + Day-by-Day Plan)` |
+| `POST /api/tasks/{id}/toggle` | `{done: bool}` | `AppState` | `prd.md > Today and Marking Done` |
+| `POST /api/day/next` | — | `AppState` | `prd.md > Next Day, Review and Re-plan` |
+
+`AppState` = `{settings: {weekly_hours, current_day} | null, goals: [Goal with breakdown, tasks, last_change], today: [Task with goal_id/goal_text]}`. The frontend re-reads the whole state after every action. With at most 3 goals the state is small, and the screen can never drift from the database. `types.ts` mirrors these shapes by hand.
+
+### Planner in Detail
+- `base.py`: the `Planner` protocol, with `plan_new_goal(ctx) -> NewGoalPlan` (adding a goal) and `replan(ctx) -> Replan` (after misses). `get_planner()` reads `AI_PROVIDER` from `.env`.
+- `gemini.py`: `client.models.generate_content(model=GEMINI_MODEL, contents=prompt, config=GenerateContentConfig(response_mime_type="application/json", response_json_schema=Schema.model_json_schema()))`, then `Schema.model_validate_json(response.text)`.
+- `openai.py`: raises `NotImplementedError("OpenAI planner not built yet")`.
+- `fake.py`: fixed plans for tests; can be told to return impossible, rule-breaking or failing replies.
+- `prompts.py` tells the AI to:
+  - build workstreams with time budgets, then derive daily tasks from them;
+  - size the plan to the goal, not the deadline;
+  - surface long-lead steps (things that depend on other people);
+  - give every task a done criterion, minutes and a why;
+  - plan jointly with the other goals and merge shared work where sensible;
+  - stay within the weekly hours;
+  - be honest about feasibility (impossible vs. stretch vs. comfortable);
+  - write change notes in calm, plain words naming days and tasks and saying whether the deadline is still met.
+
+### Validation Rules in Detail
+`check_plan(ctx, reply) -> list[str]` returns plain-language problems, or an empty list if the plan is fine.
+- Every task has a non-empty title, done criterion and why, and `minutes > 0`.
+- Dates fall between the plan's start day and the goal's deadline, inclusive.
+- Every referenced goal exists, and every changed goal has a change note.
+- **Weekly budget:** in each Monday–Sunday week, total minutes across all goals (including the one being added) ≤ `weekly_hours × 60`.
+
+If there are problems, the service calls the planner once more with the problems appended to the prompt. If the second reply also fails, it raises `PlanningFailed` (HTTP 502).
+
 ## External Services and Dependencies
 
 ### Gemini API
 - **Call:** `google.genai.Client()` reads `GEMINI_API_KEY` from the environment, then `client.models.generate_content(...)` with JSON structured output as described in **Planner Layer**. One call per goal added (two if a validation retry happens), zero per tick, one per Next day with misses.
-- **Model:** `GEMINI_MODEL`, default `gemini-flash-latest`; switch to `gemini-2.5-pro` if plan quality is weak.
+- **Model:** `GEMINI_MODEL`, default `gemini-flash-latest`; switch to `gemini-pro-latest` if plan quality is weak. Pro costs several times more per call.
 - **Key:** your own Gemini key in `.env`, never committed (`.env` is already gitignored).
 - **Docs:** https://googleapis.github.io/python-genai/, https://ai.google.dev/gemini-api/docs/structured-output, https://ai.google.dev/gemini-api/docs/models
-- **Limits and cost:** not verified this session. Check https://ai.google.dev/gemini-api/docs/rate-limits and https://ai.google.dev/gemini-api/docs/pricing early. A demo is a few dozen calls.
+- **Cost:** your key is pay-as-you-go (billed after use), currently covered by about $10 of Google credit. Every real AI call spends money; ticks and tests don't.
+  - Rough estimate, not measured yet: one big plan call (~10k tokens in, ~30k out including the model's thinking) is about **$0.10 on Flash** and **$0.40 on Pro** at the prices listed in October 2026. Flash's lower prices are introductory until 31 Dec 2026. So $10 covers roughly 80 Flash calls or 25 Pro calls.
+  - Building and recording the demo takes a few dozen calls. That fits on Flash, but repeated Pro runs or retries could use up the credit.
+  - **Guards:** the test suite uses the Fake planner, so it costs nothing. The live test only runs with `RUN_LIVE=1`. The Gemini planner logs each call's token counts (`response.usage_metadata`) to the terminal so you can see what each call spends. Set a budget alert in Google Cloud Billing (it emails you; it doesn't stop spending), and check when the $10 credit expires.
+  - Prices: https://ai.google.dev/gemini-api/docs/pricing. Rate limits (not checked, unlikely to matter for one user): https://ai.google.dev/gemini-api/docs/rate-limits
 
 ### OpenAI API (slot only)
 Not built. If you fill it in later, use structured outputs (https://platform.openai.com/docs/guides/structured-outputs) with the same Pydantic schemas. Check your employer's policy before using an employer-provided key on a personal project.
@@ -348,6 +393,7 @@ No other services: no hosting, no cloud database, no auth.
 **Learner decisions (this session):**
 - Python + FastAPI backend; React + TypeScript + Vite frontend (accepted my recommendation of React over plain TypeScript after the explanation of what Vite and React each do).
 - Gemini first, with a slot for OpenAI.
+- Your Gemini key is pay-as-you-go with about $10 of Google credit, not free tier. Cost is a real constraint, so Flash is the default and calls are logged.
 - SQLite over Firebase (accepted recommendation).
 - Verification is split in two (accepted recommendation): automated pytest tests with a fake AI for the rules, plus code checks on every AI reply, plus your own judgement on whether plans are believable.
 - **Draft → feedback → commit moved to Later** after review, to keep the POC simple (`prd.md > Deferred From the POC`).
@@ -363,8 +409,8 @@ No other services: no hosting, no cloud database, no auth.
 During the build, the evidence is the passing test suite, plus one real run on the 16-products goal that you judge against `prd.md > The System` (about one product every 5–6 days, long-lead steps surfaced).
 
 **To check early in the build:**
-- **Reply size and latency:** in step 1, make one real Gemini call for the 16-products goal. Record the reply size and time, and whether Flash's plan is believable. This decides Flash vs. Pro and whether the 14-day fallback is needed.
-- Gemini free-tier rate limits for your key.
+- **Reply size and latency:** in step 1, make one real Gemini call for the 16-products goal. Record the reply size, time and token cost, and whether Flash's plan is believable. This decides Flash vs. Pro and whether the 14-day fallback is needed. Then update the cost estimate in **Gemini API > Cost**.
+- Set a Google Cloud Billing budget alert, and check when your $10 credit expires.
 
 **Carried from the PRD:**
 - Final app name: revisit before `6-ship`.
