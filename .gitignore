@@ -5,3 +5,11 @@
 
 # Third-party reference images (not ours)
 *.png
+
+# Local data and build output
+/data/
+__pycache__/
+.venv/
+.pytest_cache/
+node_modules/
+/frontend/dist/

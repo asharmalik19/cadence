@@ -14,8 +14,8 @@ Source: `scope.md > The Core Loop`, `scope.md > What "Working" Looks Like`.
 1. **First open.** Before anything else, the user enters how many hours a week they can work (e.g. 40 or 60). This is the time budget all goals share.
    Then the screen is empty apart from an **Add goal** button and the (empty) **Active Goals** panel on the left.
 2. **Add a goal.** Clicking **Add goal** asks for two things together: the goal (e.g. "Build 16 products by the end of 2026") and its deadline.
-3. **Feasibility check.** The AI judges the goal against the deadline.
-   - **Impossible:** it says clearly that the deadline is too short for this goal and asks for a new deadline. This repeats until the deadline is realistic. The goal is not added until then.
+3. **Clarify, make it SMART, check feasibility.** The user doesn't have to write a perfect goal. The AI first asks only what it needs to plan (usually 2–4 questions tailored to this goal, e.g. "What size is one product?", "How will you build them?"; none if the goal is already specific). The user answers once. The AI then restates the goal as a **SMART goal** (specific, measurable, achievable, time-bound) and judges it against the deadline.
+   - **Impossible:** it says clearly why, including what it assumed, and lets the user change the deadline or their answers and try again. This repeats until it's realistic. The goal is not added until then.
    - **Stretch or comfortable:** it goes ahead.
 4. **System is built.** The goal appears in **Active Goals**. Its system has two parts: a **breakdown** (the kinds of ongoing work the goal needs and how much time each gets) and a **day-by-day plan** to completion, sized to what the goal needs rather than stretched to the deadline.
 5. **More goals.** The user adds up to **3** active goals, one at a time. Adding a goal re-plans the existing goals too, so all plans fit the weekly budget together. Any existing goal whose plan changes gets a **Last change** note. Trying to add a 4th is refused.
@@ -34,9 +34,9 @@ One main screen with a persistent left panel. The main area switches between vie
 
 - **Active Goals panel (left, always visible).** Lists active goals (max 3) and holds the **Add goal** button. Clicking a goal opens its **Goal view**. There is also a way back to **Today**.
 - **Today view (main area, default).** Today's tasks from all active goals, each with a tick box. Holds the **Next day** control.
-- **Goal view (main area).** One goal's full system: the goal and deadline, the **breakdown**, the **day-by-day plan**, and the **Last change** note.
+- **Goal view (main area).** One goal's full system: the goal, its **SMART version** and deadline, the **breakdown**, the **day-by-day plan**, and the **Last change** note.
 - **Weekly hours (first-open step).** Asked once, before the first goal: hours available per week.
-- **Add goal (form/dialog).** Goal text and deadline, plus the feasibility response (impossible → new-deadline prompt).
+- **Add goal (form/dialog).** Goal text and deadline, then the AI's clarifying questions with answer boxes, then the feasibility response (impossible → change deadline or answers and retry).
 - **End-of-day review (dialog/step).** Shown after clicking **Next day**: the unticked tasks with tick boxes and a confirm action that triggers the re-plan.
 - **Empty state.** Before any goal exists, the main area is a clear prompt to add your first goal.
 
@@ -64,8 +64,13 @@ Source: `scope.md > The Unique Kernel` (plans goals together).
 Source: `scope.md > The POC Boundary`.
 
 - Clicking **Add goal** asks for the goal text and a deadline together. The deadline is required.
-- The AI checks feasibility before building anything.
-  - [ ] An obviously impossible goal (e.g. "16 products in 3 days") gets a clear message that the deadline is too short, and the user is asked for a new deadline.
+- **Clarifying questions:** the AI asks only what it needs to plan this goal (none if it's already specific). The user answers once in the dialog.
+- **SMART goal:** the AI restates the goal in SMART form from the goal, answers and deadline. It is shown in the Goal view.
+- The AI checks feasibility before building anything, and an impossible verdict says what it assumed.
+  - [ ] "Build 16 products by the end of 2026" gets clarifying questions about what a product is and how it will be built, before any verdict.
+  - [ ] After answering (e.g. "small apps like an Apify actor, built with AI coding agents"), the 16-products goal is judged stretch or comfortable, not impossible.
+  - [ ] The Goal view shows the SMART version of the goal.
+  - [ ] An obviously impossible goal (e.g. "16 products in 3 days") gets a clear message that the deadline is too short, with what the AI assumed, and the user can change the deadline or their answers.
   - [ ] A new deadline that is still impossible gets the same message again.
   - [ ] The goal does not appear in **Active Goals** until a realistic deadline is accepted.
   - [ ] A stretch goal (hard but doable) is planned normally.
@@ -121,7 +126,7 @@ Source: `scope.md > The Core Loop` (Missed it?), `scope.md > The POC Boundary` (
 
 - **First use / empty:** weekly hours asked first; then no goals; a prompt plus **Add goal** button; Active Goals panel empty.
 - **Planning in progress:** while the AI builds or re-plans a system, the user sees that it's working. *(Assumption: some visible working indicator; wording/style left to spec.)*
-- **Impossible deadline:** clear message plus new-deadline prompt, repeating until realistic (see **Adding a Goal**).
+- **Impossible deadline:** clear message with the AI's assumptions, plus a way to change the deadline or answers, repeating until realistic (see **Adding a Goal**).
 - **At cap:** a 4th goal is refused.
 - **Review with nothing unticked:** *(Assumption: if every task is ticked, Next day advances straight to the new day with no review and no re-plan.)*
 - **AI unavailable or fails:** *(Assumption: show a calm error saying planning failed, with a retry. Nothing is added or changed.)*
@@ -134,14 +139,15 @@ Source: `scope.md > The Core Loop` (Missed it?), `scope.md > The POC Boundary` (
 - **End-of-day review on Next day instead of notifications.** It catches forgotten ticks before re-planning. Notifications stay in Later (hard to demo, and out of scope).
 - **Re-plans are always visible, even simple shifts,** through a **Last change** note per goal. Chosen over a re-plan counter, which only shows that a change happened, not what changed.
 - **Cap of 3 active goals,** a plain refusal beyond that, and no remove/finish in the POC. Based on focus advice (1–3 goals) and the scope's "a couple."
-- **Impossible goals are never added.** The user re-enters a deadline until it's realistic. Stretch goals are fine.
+- **Impossible goals are never added.** The user changes the deadline or answers until it's realistic. Stretch goals are fine.
+- **The tool makes the goal SMART, not the user.** A one-sentence goal was too ambiguous: in the first real AI call, "Build 16 products by the end of 2026" was judged impossible because the AI assumed full production software. The user supplies the goal and deadline (Specific, with the AI's help, and Time-bound); the AI asks what it's missing, writes the SMART version, judges Achievable, and makes it Measurable through done criteria. The answers and SMART goal are saved with the goal and used in every later plan and re-plan.
 - **One weekly hours number, entered at first open before any goal,** so the AI plans all goals against a known time limit.
 - **Adding a goal reworks existing plans** rather than giving the new goal only leftover time. It's more practical, and the extra AI call is a small cost at 3 goals.
 - **No bulk add.** With rework, adding one at a time reaches the same joint plan, and bulk would complicate the feasibility loop.
 - **Working name: SysPlanner,** to be revisited once the project is ready. Noted concerns: "sys" can read as IT jargon, and "planner" undersells that the tool does the planning.
 
 ## What We're Building
-- Add goal with required deadline; AI feasibility check with the impossible → re-enter loop.
+- Add goal with required deadline; AI clarifying questions; AI-written SMART goal; feasibility check with the impossible → change and retry loop.
 - AI-built system per goal: breakdown with time amounts and a day-by-day plan (done criterion, time estimate, why per task), sized to the goal and planned jointly across active goals.
 - Active Goals panel (max 3) with a refusal on the 4th.
 - Today view across goals with done-ticking.
@@ -162,6 +168,7 @@ Source: `scope.md > The Core Loop` (Missed it?), `scope.md > The POC Boundary` (
 ## Possible Later Enhancements
 - A re-plan history or counter per goal, to spot goals that keep slipping (worded so it doesn't feel like a guilt score).
 - The AI suggesting a realistic deadline when one is impossible.
+- **Chat-style goal refinement:** a back-and-forth conversation (or an extra follow-up round) when one round of clarifying questions isn't enough. The POC asks one round and shows remaining assumptions instead.
 - Editing a goal or its deadline after it's planned.
 - Changing the weekly hours later (with a re-plan).
 
