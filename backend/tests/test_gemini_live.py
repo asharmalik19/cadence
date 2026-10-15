@@ -16,7 +16,7 @@ def test_gemini_plans_16_products_goal():
 
     today = date.today()
     ctx = PlanContext(
-        weekly_hours=50,
+        daily_hours=8,
         today=today,
         start_day=today,
         new_goal=NewGoalRequest(text="Build 16 products by the end of 2026", deadline=date(2026, 12, 31)),

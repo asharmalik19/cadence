@@ -4,13 +4,13 @@ import pytest
 
 from backend.app.models import GoalContext, NewGoalRequest, PlanContext, TaskContext, Workstream
 
-TODAY = date(2026, 10, 12)  # a Monday, so week maths is easy to read
+TODAY = date(2026, 10, 12)
 
 
 @pytest.fixture
 def new_goal_ctx() -> PlanContext:
     return PlanContext(
-        weekly_hours=10,
+        daily_hours=4,
         today=TODAY,
         start_day=TODAY,
         new_goal=NewGoalRequest(text="Write a short book", deadline=date(2026, 11, 30)),
@@ -19,7 +19,7 @@ def new_goal_ctx() -> PlanContext:
 
 @pytest.fixture
 def existing_goal() -> GoalContext:
-    """Goal 1 with 3 hours a day planned for this week's Mon–Wed; Monday already ticked."""
+    """Goal 1 with 3 hours a day planned for 12–14 Oct; the 12th already ticked."""
     return GoalContext(
         id=1,
         text="Build 16 products",

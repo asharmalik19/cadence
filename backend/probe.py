@@ -1,12 +1,17 @@
 """Real Gemini calls for one goal: clarifying questions (you answer in the terminal), then the plan.
 
-    uv run python -m backend.probe
-    uv run python -m backend.probe --goal "Get an MS scholarship" --deadline 2027-01-15 --hours 50
+    uv run python -m backend.probe --deadline 2027-01-15
+    uv run python -m backend.probe --goal "Build 16 products by the end of 2026" --deadline 2026-12-31
+
+Every run is saved to data/probe-<model>.json with your answers, so you can compare fairly:
+
+    uv run python -m backend.probe --replay data/probe-gemini-flash-latest.json --model gemini-pro-latest
 """
 
 import argparse
 import json
 from datetime import date
+from pathlib import Path
 
 from .app import config
 from .app.models import Clarification, NewGoalRequest, PlanContext
@@ -18,21 +23,36 @@ from .app.validation import check_plan
 
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("--goal", default="Build 3 products/apps by the end of 2026")
-    p.add_argument("--deadline", default="2026-12-31")
-    p.add_argument("--hours", type=int, default=50)
+    p.add_argument("--goal", default="Get a scholarship to study abroad")
+    p.add_argument("--deadline", help="YYYY-MM-DD (required unless --replay; with --replay, overrides the saved deadline)")
+    p.add_argument("--hours", type=int, default=8, help="hours per day to plan for")
     p.add_argument("--days", type=int, default=14, help="how many days of tasks to print")
+    p.add_argument("--replay", help="reuse the goal and answers saved by an earlier run")
+    p.add_argument("--model", help="override GEMINI_MODEL for this run")
     args = p.parse_args()
 
-    today = date.today()
-    ctx = PlanContext(
-        weekly_hours=args.hours,
-        today=today,
-        start_day=today,
-        new_goal=NewGoalRequest(text=args.goal, deadline=date.fromisoformat(args.deadline)),
-    )
+    if args.replay:
+        saved = json.loads(Path(args.replay).read_text())["context"]
+        saved.setdefault("daily_hours", args.hours)  # runs saved before the daily limit had weekly_hours
+        saved.pop("weekly_hours", None)
+        ctx = PlanContext.model_validate(saved)
+        if args.deadline:  # same answers, new deadline: like resubmitting after "impossible"
+            ctx.new_goal.deadline = date.fromisoformat(args.deadline)
+    elif args.deadline:
+        today = date.today()
+        ctx = PlanContext(
+            daily_hours=args.hours,
+            today=today,
+            start_day=today,
+            new_goal=NewGoalRequest(text=args.goal, deadline=date.fromisoformat(args.deadline)),
+        )
+    else:
+        p.error("--deadline is required unless you use --replay")
+    goal = ctx.new_goal
 
     planner = GeminiPlanner()
+    if args.model:
+        planner.model = args.model
     calls = []
     original = planner._call
 
@@ -43,12 +63,18 @@ def main() -> None:
             calls.append(dict(planner.last_call))
 
     planner._call = counted
-    print(f"Asking {config.GEMINI_MODEL} about: {args.goal!r} by {args.deadline}, {args.hours} h/week…\n")
+    print(f"{planner.model}: {goal.text!r} by {goal.deadline}, {ctx.daily_hours} h/day\n")
     try:
-        questions = planner.clarify(ctx).questions
-        print(f"  ({calls[-1]['seconds']} s)\n")
-        answers = [Clarification(question=q, answer=input(f"Q: {q}\nA: ").strip()) for q in questions]
-        ctx.new_goal.clarifications = answers
+        if args.replay:
+            print("Replaying saved answers:")
+            for c in goal.clarifications:
+                print(f"Q: {c.question}\nA: {c.answer}")
+        else:
+            questions = planner.clarify(ctx).questions
+            print(f"  ({calls[-1]['seconds']} s)\n")
+            goal.clarifications = [
+                Clarification(question=q, answer=input(f"Q: {q}\nA: ").strip()) for q in questions
+            ]
         print("\nPlanning…\n")
         reply = plan_checked(planner, ctx, "new_goal")
     except PlanningFailed as e:
@@ -79,9 +105,11 @@ def main() -> None:
     for c in calls:
         print("  " + json.dumps(c))
     config.DB_PATH.parent.mkdir(exist_ok=True)
-    out = config.DB_PATH.parent / "probe-reply.json"
-    out.write_text(reply.model_dump_json(indent=1))
-    print(f"\nFull reply saved to {out.relative_to(config.ROOT)}")
+    out = config.DB_PATH.parent / f"probe-{planner.model}.json"
+    run = {"model": planner.model, "context": ctx.model_dump(mode="json"),
+           "reply": reply.model_dump(mode="json"), "calls": calls}
+    out.write_text(json.dumps(run, indent=1))
+    print(f"\nFull run (your answers + reply) saved to {out.relative_to(config.ROOT)}")
 
 
 if __name__ == "__main__":

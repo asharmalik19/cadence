@@ -35,13 +35,13 @@ They come back because each day is already decided, and a miss doesn't break the
 Not yet discussed. Should feel like the opposite of a guilt spiral: a missed day is just an input to re-planning.
 
 ## Why This Matters to the Learner
-The demo goal, 16 products by end of 2026, is "close to my heart" and the one they're "absolutely clear about."
+The demo goal is now the **scholarship to study abroad**: the goal behind the real, recent cost below, and "more specific… more realistic… more common." The 16-products goal is still "close to my heart," but it was replaced as the demo goal during `5-build` because it carries too much uncertainty to judge the tool by: no ideas yet, heavy personalization, and an unclear count.
 
 A real, recent cost: a scholarship application dropped with 2 days left and nothing done, partly because reference letters can't be collected in 2 days. "I think that is because I didn't have any system for that goal." Building systems for unknown goals is hard for them, "but for an agent, it's easy because an agent has seen the internet... It can roughly project better than me."
 
 ## What "Working" Looks Like
 In a one-minute demo:
-1. Add goals with deadlines. Main demo goal: **"Build 16 products by the end of 2026"**, the learner's real current goal (~12–13 weeks from Oct 4, 2026, so roughly one product every 5–6 days), plus a second goal to show joint planning. Trying to add one past the cap is refused.
+1. Add goals with deadlines. Main demo goal: **getting a scholarship to study abroad**, with its real deadline. It tests long-lead steps that depend on other people (reference letters). *(Originally "Build 16 products by the end of 2026"; switched in `5-build`.)* Plus a second goal to show joint planning. Trying to add one past the cap is refused.
 2. The AI produces a system for each goal (workstreams + time budgets) and a roadmap to completion sized to what the goal needs, with daily items, done criteria, time estimates, and a reason for each step. It's honest about feasibility and surfaces steps the learner wouldn't foresee.
 3. Mark today done; move to the next day.
 4. Mark a day **missed**, and watch the remaining roadmap reshape itself. **This is the "oh, that's cool" beat.**

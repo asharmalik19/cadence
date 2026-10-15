@@ -67,18 +67,23 @@ class FakePlanner:
         return Replan(goals=goals)
 
     def _goal_plan(self, ctx: PlanContext, goal_id: int, note: str) -> GoalPlan:
+        days, d = [], ctx.start_day
+        while len(days) < self.days:  # one task a day, Sundays free
+            if d.weekday() != 6:
+                days.append(d)
+            d += timedelta(days=1)
         return GoalPlan(
             goal_id=goal_id,
             breakdown=[Workstream(name="Build", minutes_per_week=self.minutes * 7, purpose="Make progress.")],
             tasks=[
                 TaskPlan(
-                    day=ctx.start_day + timedelta(days=i),
+                    day=day,
                     title=f"Work session {i + 1}",
                     done_criterion="Session finished",
                     minutes=self.minutes,
                     why="Steady daily work moves the goal forward.",
                 )
-                for i in range(self.days)
+                for i, day in enumerate(days)
             ],
             change_note=note,
         )

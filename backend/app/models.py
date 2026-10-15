@@ -92,7 +92,7 @@ class NewGoalRequest(BaseModel):
 
 
 class PlanContext(BaseModel):
-    weekly_hours: int
+    daily_hours: int = Field(description="Hours the user plans for each day, weekends included.")
     today: date
     start_day: date = Field(description="First day the reply may plan tasks on.")
     goals: list[GoalContext] = Field(default_factory=list, description="Existing active goals.")

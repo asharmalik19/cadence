@@ -39,22 +39,46 @@ def test_tasks_must_sit_between_start_day_and_deadline(new_goal_ctx):
     assert any("after the deadline" in p for p in problems)
 
 
-def test_weekly_budget_is_checked_per_monday_to_sunday_week(new_goal_ctx):
-    # 10 h/week budget; 7 days × 100 min = 700 min in the first week is over 600.
-    reply = FakePlanner(minutes=100, days=7).plan_new_goal(new_goal_ctx)
+def test_daily_limit_is_checked_per_day(new_goal_ctx):
+    # 4 h/day limit; 300 min on one day is over 240.
+    reply = FakePlanner(minutes=300, days=1).plan_new_goal(new_goal_ctx)
     problems = check_plan(new_goal_ctx, reply)
-    assert problems == ["The week starting 2026-10-12 has 700 minutes of tasks, over the weekly budget of 600."]
+    assert problems == ["2026-10-12 has 300 minutes of tasks across all goals, over the daily limit of 240."]
+
+
+def test_every_week_keeps_a_free_day(new_goal_ctx):
+    # Fill Monday 12 Oct to Sunday 18 Oct.
+    reply = FakePlanner(days=7).plan_new_goal(new_goal_ctx)
+    for i, t in enumerate(reply.new_goal.tasks):
+        t.day = new_goal_ctx.start_day + timedelta(days=i)
+    assert check_plan(new_goal_ctx, reply) == [
+        "The week starting 2026-10-12 has tasks on all 7 days; leave at least one day free."
+    ]
+
+
+def test_free_day_can_be_any_day_of_the_week(new_goal_ctx):
+    reply = FakePlanner(days=6).plan_new_goal(new_goal_ctx)
+    for i, t in enumerate(reply.new_goal.tasks):  # Mon–Wed, then Fri–Sun: Thursday free
+        t.day = new_goal_ctx.start_day + timedelta(days=i if i < 3 else i + 1)
+    assert check_plan(new_goal_ctx, reply) == []
+
+
+def test_uneven_days_are_fine_within_the_limit(new_goal_ctx):
+    reply = FakePlanner(days=3).plan_new_goal(new_goal_ctx)
+    reply.new_goal.tasks[0].minutes = 240
+    reply.new_goal.tasks[1].minutes = 30
+    assert check_plan(new_goal_ctx, reply) == []
 
 
 def test_budget_counts_other_goals_tasks(new_goal_ctx, existing_goal):
-    # Goal 1 keeps 3×180 = 540 min this week. Adding 61 min of new work goes over 600.
+    # Goal 1 has 180 min on the 12th. Adding 61 min of new work that day goes over 240.
     new_goal_ctx.goals = [existing_goal]
     reply = FakePlanner(minutes=61, days=1).plan_new_goal(new_goal_ctx)
-    assert any("over the weekly budget" in p for p in check_plan(new_goal_ctx, reply))
+    assert any("over the daily limit" in p for p in check_plan(new_goal_ctx, reply))
 
 
 def test_rework_replaces_planned_tasks_but_keeps_ticked_ones(new_goal_ctx, existing_goal):
-    # Rework goal 1 down to nothing new: only Monday's ticked 180 min stays; plus 60 min new = fine.
+    # Rework goal 1 down to nothing new: only the 12th's ticked 180 min stays; plus 60 min new = fine.
     new_goal_ctx.goals = [existing_goal]
     reply = FakePlanner(days=1).plan_new_goal(new_goal_ctx)
     reply.rework = [GoalPlan(goal_id=1, breakdown=existing_goal.breakdown, tasks=[], change_note="Paused.")]

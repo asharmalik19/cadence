@@ -11,10 +11,10 @@ SysPlanner is two programs on your laptop that talk to each other, plus one file
 
 - **The backend** is a Python program built with **FastAPI**. It holds all the rules: the 3-goal cap, what counts as missed, when to re-plan. It is the only part that talks to the AI and the only part that reads and writes the data file.
 - **The frontend** is the screen you click on, written in **TypeScript with React**, and turned into something the browser can run by **Vite**. It shows the sidebar, Today, the Goal view and the dialogs. It never decides anything; it asks the backend and shows what comes back.
-- **The data file** is a **SQLite** database: one file on your laptop (`data/sysplanner.db`). Your weekly hours, goals, breakdowns, every task and every tick live there, so closing the app loses nothing.
-- **The AI** is **Gemini**, reached through a small "planner" layer in the backend. Whenever a plan needs to be built or changed, the backend sends Gemini the full picture (your weekly hours, today's date, every goal and its tasks, what you missed) and asks for the answer in a fixed shape. That shape is defined once in Python, so the backend can check the reply before trusting it. The planner layer has a slot for OpenAI too, but only Gemini is built.
+- **The data file** is a **SQLite** database: one file on your laptop (`data/sysplanner.db`). Your daily hours, goals, breakdowns, every task and every tick live there, so closing the app loses nothing.
+- **The AI** is **Gemini**, reached through a small "planner" layer in the backend. Whenever a plan needs to be built or changed, the backend sends Gemini the full picture (your daily hours, today's date, every goal and its tasks, what you missed) and asks for the answer in a fixed shape. That shape is defined once in Python, so the backend can check the reply before trusting it. The planner layer has a slot for OpenAI too, but only Gemini is built.
 
-The one idea to hold on to: **the AI proposes, the backend checks, the database remembers.** Every AI reply passes code rules (every task has a done criterion, an estimate and a why; nothing goes over your weekly hours; nothing runs past the deadline) before it is saved. If a reply breaks a rule, the backend asks once more, then shows a calm "planning failed, retry" message and changes nothing.
+The one idea to hold on to: **the AI proposes, the backend checks, the database remembers.** Every AI reply passes code rules (every task has a done criterion, an estimate and a why; no day goes over your daily hours; nothing runs past the deadline) before it is saved. If a reply breaks a rule, the backend asks once more, then shows a calm "planning failed, retry" message and changes nothing.
 
 Days are simulated. The app keeps its own "current day" in the database, starting on the real date of your first open, and **Next day** moves it forward by one.
 
@@ -24,16 +24,17 @@ Why this shape and not something bigger: it's single-user and clone-and-run, so 
 
 PRD ref: `prd.md > The Core Journey`.
 
-1. **First open.** The frontend asks the backend for the whole app state (`GET /api/state`). There are no settings yet, so it shows the weekly-hours step. You type 50; the frontend sends it (`POST /api/settings`); the backend saves it and sets the current day to today's real date.
-2. **Add a goal.** You enter "Build 16 products by the end of 2026" and 31 Dec 2026. The frontend sends it (`POST /api/goals/clarify`). The backend checks the cap, then makes one small AI call that returns the questions Gemini needs answered to plan this goal (possibly none). The dialog shows them with answer boxes.
-3. **SMART goal, feasibility + system.** You answer once and the frontend sends goal, deadline and answers (`POST /api/goals`), showing "Planning…". The backend checks the cap again, then makes one AI call with your weekly hours, the current day, the existing goals, and the new goal with its answers. Gemini replies with a SMART version of the goal, the assumptions it made, and a verdict:
+1. **First open.** The frontend asks the backend for the whole app state (`GET /api/state`). There are no settings yet, so it shows the daily-hours step. You type 8; the frontend sends it (`POST /api/settings`); the backend saves it and sets the current day to today's real date.
+2. **Add a goal.** You enter "Get a scholarship to study abroad" and its deadline. The frontend sends it (`POST /api/goals/clarify`). The backend checks the cap, then makes one small AI call that returns the questions Gemini needs answered to plan this goal (possibly none). The dialog shows them with answer boxes.
+3. **SMART goal, feasibility + system.** You answer once and the frontend sends goal, deadline and answers (`POST /api/goals`), showing "Planning…". The backend checks the cap again, then makes one AI call with your daily hours, the current day, the existing goals, and the new goal with its answers. Gemini replies with a SMART version of the goal, the assumptions it made, and a verdict:
    - **Impossible:** the backend saves nothing and returns the message and assumptions. The dialog shows them and lets you change the deadline or your answers. You submit again, which is a fresh call.
    - **Stretch / comfortable:** the reply also contains the new goal's breakdown and day-by-day plan, plus any rework of existing goals. The backend checks the rules, then in one transaction saves the new goal and applies the rework (replacing existing goals' unticked tasks from today onward and writing their **Last change** notes). The goal appears in the sidebar and its Goal view opens.
 4. **More goals.** Steps 2–3 repeat for goals 2 and 3. A 4th gets a plain refusal from the backend (HTTP 409) before any AI call. The saved answers and SMART goal travel with the goal into every later plan and re-plan, so the AI never falls back to guessing.
 5. **Today.** `GET /api/state` returns today's tasks across all goals, labelled by goal. Ticking one sends `POST /api/tasks/{id}/toggle`; the backend saves it and the frontend refreshes state.
-6. **Next day → review.** The frontend checks today's tasks for unticked ones. If there are any, it opens the review dialog listing them; ticks there use the same toggle call. If all are ticked, it skips the review.
-7. **Re-plan.** Confirming sends `POST /api/day/next`. The backend marks today's unticked tasks as **missed**, then makes one AI call covering only the goals with misses, starting from tomorrow. It checks the rules, then in one transaction replaces those goals' tasks from tomorrow onward, writes their **Last change** notes and advances the current day. If the AI fails, nothing changes; the day doesn't advance and you can retry.
+6. **Next day → review.** The frontend opens the review dialog: today's unticked tasks (ticks there use the same toggle call) plus an optional update box per goal. With nothing unticked, it shows only the update boxes.
+7. **Re-plan.** Confirming sends `POST /api/day/next` with any updates. The backend saves the updates, marks today's unticked tasks as **missed**, then makes one AI call covering only the goals with misses or new updates, starting from tomorrow. With neither, it just advances the day. It checks the rules, then in one transaction replaces those goals' tasks from tomorrow onward, writes their **Last change** notes and advances the current day. If the AI fails, nothing changes; the day doesn't advance and you can retry.
 8. **See what changed / repeat.** The frontend refreshes state: Today shows the new day, and each re-planned goal's Goal view shows its note.
+9. **Update any time.** On a Goal view, "Anything new?" sends `POST /api/goals/{id}/updates`. The backend saves it and re-plans that goal from the current day onward (ticked tasks stay), in one transaction, with the same rule checks.
 
 ```mermaid
 sequenceDiagram
@@ -104,7 +105,7 @@ uv run uvicorn backend.app.main:app --port 8000   # open http://localhost:8000
 
 **Fresh start for a recording:** stop the server and delete `data/sysplanner.db`. The next start recreates it empty.
 
-**Submission:** a short demo video plus a public GitHub repository are required. No deployment is planned (`prd.md > Deferred From the POC`: public hosted version). The demo follows `prd.md > The Core Journey > Success (the demo)`: weekly hours → add the 16-products goal → add two more → refused on a 4th → tick some → leave one unticked → Next day → review → **Last change** note. AI calls take a while, so trim the waits in the edit.
+**Submission:** a short demo video plus a public GitHub repository are required. No deployment is planned (`prd.md > Deferred From the POC`: public hosted version). The demo follows `prd.md > The Core Journey > Success (the demo)`: daily hours → add the scholarship goal → add two more → refused on a 4th → tick some → leave one unticked → Next day → review → **Last change** note. AI calls take a while, so trim the waits in the edit.
 
 ## Look and Feel
 
@@ -176,7 +177,7 @@ PRD ref: `prd.md > Goal Cap`, `prd.md > Next Day, Review and Re-plan`, `prd.md >
 Builds the prompt, calls the AI and returns a plan in a fixed shape. There are three interchangeable versions: **Gemini** (the real one), **OpenAI** (an empty slot) and **Fake** (canned plans so tests don't need the AI). `.env` picks which one runs. PRD ref: `prd.md > The System (Breakdown + Day-by-Day Plan)`, `prd.md > Adding a Goal`, `prd.md > Last Change Note`.
 
 #### Validation (`backend/app/validation.py`)
-Checks every AI plan against the rules: complete tasks, dates inside the deadline, weekly hours not exceeded. If a plan fails, the AI gets one retry with the problems listed. If it fails again, you see the calm "planning failed" message and nothing changes. PRD ref: `prd.md > Weekly Time Budget`, `prd.md > The System (Breakdown + Day-by-Day Plan)`.
+Checks every AI plan against the rules: complete tasks, dates inside the deadline, no day over the daily hours. If a plan fails, the AI gets one retry with the problems listed. If it fails again, you see the calm "planning failed" message and nothing changes. PRD ref: `prd.md > Daily Time Budget`, `prd.md > The System (Breakdown + Day-by-Day Plan)`.
 
 #### Store (`backend/app/db.py`)
 Opens the SQLite file (and creates it on first run) and saves all-or-nothing. Tests use a throwaway copy. PRD ref: `prd.md > Open Questions` (data across sessions).
@@ -186,10 +187,10 @@ Opens the SQLite file (and creates it on first run) and saves all-or-nothing. Te
 `App.tsx` holds the app state and picks which view to show. Every other piece just displays part of that state or sends one action.
 
 #### App Shell (`frontend/src/App.tsx`, `api.ts`, `types.ts`)
-Loads the state, picks the view (weekly-hours step, empty state, Today or a Goal view) and holds the "planning…" and error state. `api.ts` has one function per route.
+Loads the state, picks the view (daily-hours step, empty state, Today or a Goal view) and holds the "planning…" and error state. `api.ts` has one function per route.
 
-#### Weekly Hours Step (`WeeklyHoursStep.tsx`)
-One number field and Continue, shown on first open. PRD ref: `prd.md > Weekly Time Budget`.
+#### Daily Hours Step (`DailyHoursStep.tsx`)
+One number field and Continue, shown on first open. PRD ref: `prd.md > Daily Time Budget`.
 
 #### Sidebar (`Sidebar.tsx`)
 Today, your goals, and **Add goal** (disabled with a reason at 3 goals). PRD ref: `prd.md > Screens and Layout`, `prd.md > Goal Cap`.
@@ -201,10 +202,10 @@ Goal text and deadline, then the AI's clarifying questions with an answer box ea
 Today's tasks across all goals, each with its done criterion, minutes, why and a tick box, plus the **Next day** button. PRD ref: `prd.md > Today and Marking Done`, `prd.md > States and Boundaries`.
 
 #### Goal View (`GoalView.tsx`, `Breakdown.tsx`, `DayPlan.tsx`, `LastChangeNote.tsx`)
-The goal and its deadline, the breakdown into workstreams, the day-by-day plan (past days dimmed, today in gold) and the **Last change** note. PRD ref: `prd.md > The System (Breakdown + Day-by-Day Plan)`, `prd.md > Last Change Note`.
+The goal, its SMART version and deadline, the breakdown into workstreams, the day-by-day plan (past days dimmed, today in gold), the **Last change** note, and the goal's updates with an "Anything new?" box (`UpdateBox.tsx`). PRD ref: `prd.md > The System (Breakdown + Day-by-Day Plan)`, `prd.md > Last Change Note`, `prd.md > Updates (What Happened)`.
 
 #### End-of-Day Review (`ReviewDialog.tsx`)
-Lists today's unticked tasks so you can tick any you actually did, then **Confirm** to re-plan. Skipped when nothing is unticked. PRD ref: `prd.md > Next Day, Review and Re-plan`.
+Lists today's unticked tasks so you can tick any you actually did, plus an optional update box per goal, then **Confirm** to re-plan. PRD ref: `prd.md > Next Day, Review and Re-plan`, `prd.md > Updates (What Happened)`.
 
 #### Planning Indicator and Error Notice (`PlanningIndicator.tsx`, `ErrorNotice.tsx`)
 A quiet pulsing dot while the AI works. If it fails, a calm "Nothing was changed" card with **Try again**. PRD ref: `prd.md > States and Boundaries`.
@@ -215,7 +216,7 @@ SQLite, three tables. Dates are ISO strings (`YYYY-MM-DD`).
 
 ```sql
 settings (id INTEGER PRIMARY KEY CHECK (id = 1),
-          weekly_hours INTEGER NOT NULL,
+          daily_hours INTEGER NOT NULL,         -- hours to plan for per day, weekends included
           current_day TEXT NOT NULL)            -- simulated "today"
 
 goals    (id INTEGER PRIMARY KEY,
@@ -236,23 +237,29 @@ tasks    (id INTEGER PRIMARY KEY,
           minutes INTEGER NOT NULL,
           why TEXT NOT NULL,
           status TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','done','missed')))
+
+updates  (id INTEGER PRIMARY KEY,
+          goal_id INTEGER NOT NULL REFERENCES goals(id),
+          day TEXT NOT NULL,                    -- simulated day it was written
+          text TEXT NOT NULL)                   -- what happened or changed, in the user's words
 ```
 
 AI reply shapes (Pydantic, in `backend/app/models.py`):
 - `TaskPlan {day, title, done_criterion, minutes, why}`
 - `Workstream {name, minutes_per_week, purpose}`
-- `GoalPlan {goal_id, breakdown: [Workstream], tasks: [TaskPlan], change_note}`
+- `GoalPlan {goal_id, smart_goal, breakdown: [Workstream], tasks: [TaskPlan], change_note}`. On re-plans, `smart_goal` is the (possibly rewritten) SMART goal
 - `Clarify {questions: [str]}`: what the AI must know to plan this goal; empty if it's already specific.
 - `NewGoalPlan {smart_goal, assumptions: [str], verdict: "impossible"|"stretch"|"comfortable", message, new_goal: GoalPlan | null, rework: [GoalPlan]}`. `rework` lists only existing goals that change.
-- `Replan {goals: [GoalPlan]}`, covering only goals with misses.
+- `Replan {goals: [GoalPlan]}`, covering only goals with misses or new updates.
 
 | Data | Where it lives | How it's updated | When you leave and come back |
 |---|---|---|---|
-| Weekly hours, current day | `settings` row | set once; `current_day` +1 on Next day | same day, same hours |
+| Daily hours, current day | `settings` row | set once; `current_day` +1 on Next day | same day, same hours |
 | Goal + breakdown | `goals` row | written on add (with SMART goal and answers); breakdown replaced on rework or re-plan | unchanged |
 | Tasks | `tasks` rows | Adding a goal inserts its tasks and applies the rework: existing goals' still-`planned` tasks from the current day onward are replaced (ticked ones stay). Re-plan replaces tasks from tomorrow onward. Past and ticked tasks are never rewritten | ticks and history intact |
 | Ticks | `tasks.status` | toggle sets `done`/`planned` (current day only); Next day sets leftover `planned` → `missed` | intact |
 | Last change note | `goals.last_change` | overwritten by add-goal rework or re-plan | intact |
+| Updates | `updates` rows | appended from the Goal view or end-of-day review; never edited | intact, sent with every later plan |
 | Which view is open, dialog state | React state only | clicks | resets to Today (fine for the POC) |
 
 ## File Structure
@@ -264,7 +271,7 @@ sysplanner/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py            # FastAPI app, /api routes, serves frontend/dist
-│   │   ├── services.py        # the rules: weekly hours, add goal, toggle, next day
+│   │   ├── services.py        # the rules: daily hours, add goal, toggle, next day
 │   │   ├── validation.py      # code checks on every AI reply
 │   │   ├── models.py          # Pydantic shapes: API bodies, AppState, AI reply schemas
 │   │   ├── db.py              # SQLite connection, schema, queries, transactions
@@ -277,7 +284,7 @@ sysplanner/
 │   │       └── fake.py        # canned plans for tests
 │   └── tests/
 │       ├── conftest.py        # temp DB + fake planner fixtures
-│       ├── test_budget_and_goals.py   # weekly hours, add goal, feasibility loop, cap
+│       ├── test_budget_and_goals.py   # daily hours, add goal, feasibility loop, cap
 │       ├── test_today_next_day.py     # ticking, review skip, missed marking, re-plan, day advance
 │       ├── test_validation.py         # each rule, retry-once, failure changes nothing
 │       └── test_gemini_live.py        # opt-in real call (skipped unless RUN_LIVE=1)
@@ -296,7 +303,7 @@ sysplanner/
 │       │   └── app.css        # layout and component styles
 │       └── components/
 │           ├── Sidebar.tsx
-│           ├── WeeklyHoursStep.tsx
+│           ├── DailyHoursStep.tsx
 │           ├── AddGoalDialog.tsx
 │           ├── TodayView.tsx
 │           ├── TaskCard.tsx
@@ -324,13 +331,14 @@ Errors map to status codes: 409 for cap and precondition refusals, 502 for AI fa
 | Method + path | Body | Returns | PRD ref |
 |---|---|---|---|
 | `GET /api/state` | — | full `AppState` (below) | all views |
-| `POST /api/settings` | `{weekly_hours: int}` | `AppState` | `prd.md > Weekly Time Budget` |
+| `POST /api/settings` | `{daily_hours: int}` | `AppState` | `prd.md > Daily Time Budget` |
 | `POST /api/goals/clarify` | `{text, deadline}` | `{questions: [str]}` | `prd.md > Adding a Goal`, `prd.md > Goal Cap` |
 | `POST /api/goals` | `{text, deadline, clarifications: [{question, answer}]}` | `{status:"impossible", message, smart_goal, assumptions}` or `{status:"added", goal_id, state}` | `prd.md > Adding a Goal`, `prd.md > Goal Cap`, `prd.md > The System (Breakdown + Day-by-Day Plan)` |
 | `POST /api/tasks/{id}/toggle` | `{done: bool}` | `AppState` | `prd.md > Today and Marking Done` |
-| `POST /api/day/next` | — | `AppState` | `prd.md > Next Day, Review and Re-plan` |
+| `POST /api/day/next` | `{updates: [{goal_id, text}]}` | `AppState` | `prd.md > Next Day, Review and Re-plan`, `prd.md > Updates (What Happened)` |
+| `POST /api/goals/{id}/updates` | `{text}` | `AppState` (after re-plan) | `prd.md > Updates (What Happened)` |
 
-`AppState` = `{settings: {weekly_hours, current_day} | null, goals: [Goal with breakdown, tasks, last_change], today: [Task with goal_id/goal_text]}`. The frontend re-reads the whole state after every action. With at most 3 goals the state is small, and the screen can never drift from the database. `types.ts` mirrors these shapes by hand.
+`AppState` = `{settings: {daily_hours, current_day} | null, goals: [Goal with breakdown, tasks, last_change], today: [Task with goal_id/goal_text]}`. The frontend re-reads the whole state after every action. With at most 3 goals the state is small, and the screen can never drift from the database. `types.ts` mirrors these shapes by hand.
 
 ### Planner in Detail
 - `base.py`: the `Planner` protocol, with `clarify(ctx) -> Clarify` (questions before planning), `plan_new_goal(ctx) -> NewGoalPlan` (adding a goal) and `replan(ctx) -> Replan` (after misses). `get_planner()` reads `AI_PROVIDER` from `.env`.
@@ -345,16 +353,21 @@ Errors map to status codes: 409 for cap and precondition refusals, 502 for AI fa
   - surface long-lead steps (things that depend on other people);
   - give every task a done criterion, minutes and a why;
   - plan jointly with the other goals and merge shared work where sensible;
-  - stay within the weekly hours;
+  - stay within the daily hours on every day, prioritizing and cutting rather than squeezing;
+  - prefer focused, grouped sessions on one goal over small tasks spread across goals (days needn't be even);
+  - keep one day a week free of all tasks, placed where it hurts least;
   - be honest about feasibility (impossible vs. stretch vs. comfortable);
-  - write change notes in calm, plain words naming days and tasks and saying whether the deadline is still met.
+  - write change notes in calm, plain words naming days and tasks and saying whether the deadline is still met;
+  - when the verdict hinges on an unconfirmed assumption, name it in the message and say what the verdict would be if it's wrong;
+  - treat the user's updates as facts that override earlier assumptions, and rewrite the SMART goal when an update changes the goal itself.
 
 ### Validation Rules in Detail
 `check_plan(ctx, reply) -> list[str]` returns plain-language problems, or an empty list if the plan is fine.
 - Every task has a non-empty title, done criterion and why, and `minutes > 0`.
 - Dates fall between the plan's start day and the goal's deadline, inclusive.
 - Every referenced goal exists, and every changed goal has a change note.
-- **Weekly budget:** in each Monday–Sunday week, total minutes across all goals (including the one being added) ≤ `weekly_hours × 60`.
+- **Daily budget:** on every day, total minutes across all goals (including the one being added) ≤ `daily_hours × 60`.
+- **Free day:** every Monday–Sunday week has at least one day with no tasks from any goal. The AI chooses which; an update can move it.
 
 If there are problems, the service calls the planner once more with the problems appended to the prompt. If the second reply also fails, it raises `PlanningFailed` (HTTP 502).
 
@@ -366,7 +379,7 @@ If there are problems, the service calls the planner once more with the problems
 - **Key:** your own Gemini key in `.env`, never committed (`.env` is already gitignored).
 - **Docs:** https://googleapis.github.io/python-genai/, https://ai.google.dev/gemini-api/docs/structured-output, https://ai.google.dev/gemini-api/docs/models
 - **Cost:** your key is pay-as-you-go (billed after use), currently covered by about $10 of Google credit. Every real AI call spends money; ticks and tests don't.
-  - Rough estimate, not measured yet: one big plan call (~10k tokens in, ~30k out including the model's thinking) is about **$0.10 on Flash** and **$0.40 on Pro** at the prices listed in October 2026. Flash's lower prices are introductory until 31 Dec 2026. So $10 covers roughly 80 Flash calls or 25 Pro calls.
+  - **Measured in slice 1 (paid key, `gemini-flash-latest` → gemini-3.8-flash):** a clarify call takes ~6 s and ~1k tokens; a scholarship plan call takes ~35 s and ~6k tokens (including thinking), with a ~12 KB reply. The same plan on `gemini-pro-latest` took ~80 s and ~13k tokens. Original estimate, for reference: ~$0.10 per big Flash call and ~$0.40 per Pro call at October 2026 prices; measured calls are several times smaller than that estimate.
   - Building and recording the demo takes a few dozen calls. That fits on Flash, but repeated Pro runs or retries could use up the credit.
   - **Guards:** the test suite uses the Fake planner, so it costs nothing. The live test only runs with `RUN_LIVE=1`. The Gemini planner logs each call's token counts (`response.usage_metadata`) to the terminal so you can see what each call spends. Set a budget alert in Google Cloud Billing (it emails you; it doesn't stop spending), and check when the $10 credit expires.
   - Prices: https://ai.google.dev/gemini-api/docs/pricing. Rate limits (not checked, unlikely to matter for one user): https://ai.google.dev/gemini-api/docs/rate-limits
@@ -381,7 +394,7 @@ No other services: no hosting, no cloud database, no auth.
 
 ## Important Failure Modes
 
-- **AI reply is too big or slow.** The 16-products plan runs about 85 days with several tasks each, and adding a goal can also return rework for others. → The prompt keeps task text short and returns only changed goals. The UI shows "Planning…" for as long as it takes. The first build step measures one real call (see **Decisions and Open Issues**). If it's too large, fall back to detailed tasks for the next 14 days plus one summary line per later day.
+- **AI reply is too big or slow.** A long goal (e.g. a scholarship months away, or 16 products by year end) can run 80+ days with several tasks each, and adding a goal can also return rework for others. → The prompt keeps task text short and returns only changed goals. The UI shows "Planning…" for as long as it takes. The first build step measures one real call (see **Decisions and Open Issues**). If it's too large, fall back to detailed tasks for the next 14 days plus one summary line per later day.
 - **AI reply breaks a rule** (over budget, missing why, past deadline). → One automatic retry with the problems listed. Then the calm "Planning didn't work this time. Nothing was changed." with Try again.
 - **AI unavailable or bad key.** → Same calm error. Nothing saved, the day doesn't advance. A missing key is reported clearly at startup in the terminal.
 
@@ -407,19 +420,27 @@ No other services: no hosting, no cloud database, no auth.
 **Revised during the build (learner decision):**
 - **Clarifying questions and an AI-written SMART goal before the verdict.** The first real call judged "Build 16 products by the end of 2026" impossible because it assumed full production software. The learner decided the tool, not the user, should close that gap: the AI asks what it's missing, the user answers once, and the AI writes the SMART goal it plans against (`prd.md > Adding a Goal`).
 
+- **Demo goal switched to the scholarship.** After the 16-products run, the learner judged that goal too uncertain to evaluate the tool by (no ideas yet, heavy personalization). The scholarship goal is specific, common, and tests long-lead steps.
+- **The AI never invents the user's choices.** The 3-products run invented two of the product ideas. The prompt now asks about choices the goal depends on and, if they're undecided, plans the work to make them.
+- **Updates ("what happened") drive re-plans, not just misses.** The learner reframed the first plan as a well-informed draft that improves as real facts arrive. Updates come from the Goal view (re-plan now) and the end-of-day review (re-plan with that day's misses), are stored per goal, and are sent with every later plan (`prd.md > Updates (What Happened)`).
+- **One free day a week, not a fixed day off.** The learner works some Sundays but wants one day a week for admin, chores and shopping, and it varies; the rule guarantees one empty day per Monday–Sunday week, the AI places it, and updates move it.
+- **Daily hours instead of weekly.** The learner plans with a deliberately low daily number (8 h, weekends included) as a buffer that forces priorities; days may be uneven so one goal can get a deep day (`prd.md > Daily Time Budget`).
+- **Paid key, not free tier.** On the free key, calls took 40 s–6 min queued at Google; on the paid key the same call takes ~2 s, and a clarify call ~7 s.
+
 **Implementation details I derived:**
-- The weekly budget is checked per Monday–Sunday week, and ticking is only allowed on the current day.
+- The budget is checked per day, and ticking is only allowed on the current day.
 
 **Your useful unknown:** at the start you asked how to check an agent's work when there's no original to compare against. It was clarified by the verification split:
 - The PRD checkboxes are the reference, and each test is named after one.
 - Code rules catch broken AI output automatically.
 - Your judgement covers plan quality. With feedback deferred, a plan you don't believe means improving the prompt (`prompts.py`) or switching to a stronger model.
 
-During the build, the evidence is the passing test suite, plus one real run on the 16-products goal that you judge against `prd.md > The System` (about one product every 5–6 days, long-lead steps surfaced).
+During the build, the evidence is the passing test suite, plus one real run on the scholarship goal that you judge against `prd.md > The System` (long-lead steps like reference letters surfaced early, no invented choices).
 
-**To check early in the build:**
-- **Reply size and latency:** in step 1, make one real Gemini call for the 16-products goal. Record the reply size, time and token cost, and whether Flash's plan is believable. This decides Flash vs. Pro and whether the 14-day fallback is needed. Then update the cost estimate in **Gemini API > Cost**.
-- Set a Google Cloud Billing budget alert, and check when your $10 credit expires.
+**Checked in slice 1:**
+- **Reply size and latency:** done (see **Gemini API > Cost**). Replies are small enough that the 14-day fallback isn't needed.
+- **Flash vs. Pro:** the learner compared both on the same saved answers and chose Flash: comparable quality at about half the tokens and less than half the time.
+- Still worth doing: set a Google Cloud Billing budget alert, and check when the $10 credit expires.
 
 **Carried from the PRD:**
 - Final app name: revisit before `6-ship`.

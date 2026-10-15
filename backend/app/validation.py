@@ -78,9 +78,10 @@ def _check_tasks(label: str, tasks: list[TaskPlan], start: date, deadline: date)
 def _check_budget(
     ctx: PlanContext, changed: list[GoalPlan], new_tasks: list[tuple[int, TaskPlan]]
 ) -> list[str]:
-    """Every Monday–Sunday week must fit in weekly_hours, across all goals, after the change."""
+    """After the change, across all goals: no day over daily_hours, and every Monday–Sunday week keeps
+    at least one free day (the user's admin day; the AI chooses which)."""
     changed_ids = {p.goal_id for p in changed}
-    per_week: dict[date, int] = defaultdict(int)
+    per_day: dict[date, int] = defaultdict(int)
 
     for g in ctx.goals:
         for t in g.tasks:
@@ -89,19 +90,29 @@ def _check_budget(
             # A changed goal keeps only its past and ticked tasks; the reply replaces the rest.
             replaced = g.id in changed_ids and t.status == "planned" and t.day >= ctx.start_day
             if not replaced:
-                per_week[_week_start(t.day)] += t.minutes
+                per_day[t.day] += t.minutes
     for plan in changed:
         for t in plan.tasks:
-            per_week[_week_start(t.day)] += t.minutes
+            per_day[t.day] += t.minutes
     for _, t in new_tasks:
-        per_week[_week_start(t.day)] += t.minutes
+        per_day[t.day] += t.minutes
 
-    limit = ctx.weekly_hours * 60
-    return [
-        f"The week starting {week} has {minutes} minutes of tasks, over the weekly budget of {limit}."
-        for week, minutes in sorted(per_week.items())
+    limit = ctx.daily_hours * 60
+    problems = [
+        f"{day} has {minutes} minutes of tasks across all goals, over the daily limit of {limit}."
+        for day, minutes in sorted(per_day.items())
         if minutes > limit
     ]
+    busy_days_per_week: dict[date, set[date]] = defaultdict(set)
+    for day, minutes in per_day.items():
+        if minutes > 0:
+            busy_days_per_week[_week_start(day)].add(day)
+    problems += [
+        f"The week starting {week} has tasks on all 7 days; leave at least one day free."
+        for week, days in sorted(busy_days_per_week.items())
+        if len(days) == 7
+    ]
+    return problems
 
 
 def _week_start(d: date) -> date:
