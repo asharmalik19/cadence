@@ -91,6 +91,9 @@ def main() -> None:
         print("BREAKDOWN")
         for w in g.breakdown:
             print(f"  {w.name}: {w.minutes_per_week / 60:.1f} h/week. {w.purpose}")
+        print("\nMILESTONES")
+        for m in g.milestones:
+            print(f"  {m.target_day:%a %d %b}  {m.name}: {m.reached_when}")
         days = sorted({t.day for t in g.tasks})
         total = sum(t.minutes for t in g.tasks)
         print(f"\nPLAN: {len(g.tasks)} tasks over {len(days)} working days, {days[0]} → {days[-1]}, "
@@ -98,7 +101,9 @@ def main() -> None:
         for d in days[: args.days]:
             print(f"{d:%a %d %b}")
             for t in (t for t in g.tasks if t.day == d):
-                print(f"  • {t.title} ({t.minutes} min)\n    done when: {t.done_criterion}\n    why: {t.why}")
+                crit = "progress when" if t.kind == "explore" else "done when"
+                tag = "[explore] " if t.kind == "explore" else ""
+                print(f"  • {tag}{t.title} ({t.minutes} min) → {t.milestone}\n    {crit}: {t.done_criterion}\n    why: {t.why}")
         print(f"\nRULE CHECK: {check_plan(ctx, reply) or 'no problems'}")
 
     print("\nCALLS")

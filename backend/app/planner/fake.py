@@ -2,7 +2,7 @@
 
 from datetime import timedelta
 
-from ..models import Clarify, GoalPlan, NewGoalPlan, PlanContext, Replan, TaskPlan, Workstream
+from ..models import Clarify, GoalPlan, Milestone, NewGoalPlan, PlanContext, Replan, TaskPlan, Workstream
 from .base import PlanningFailed
 
 
@@ -72,16 +72,20 @@ class FakePlanner:
             if d.weekday() != 6:
                 days.append(d)
             d += timedelta(days=1)
+        milestone = Milestone(name="First result", target_day=days[-1], reached_when="The first result exists.")
         return GoalPlan(
             goal_id=goal_id,
             breakdown=[Workstream(name="Build", minutes_per_week=self.minutes * 7, purpose="Make progress.")],
+            milestones=[milestone],
             tasks=[
                 TaskPlan(
                     day=day,
+                    kind="explore" if i == 0 else "concrete",
                     title=f"Work session {i + 1}",
-                    done_criterion="Session finished",
+                    done_criterion="Notes written" if i == 0 else "Session finished",
                     minutes=self.minutes,
                     why="Steady daily work moves the goal forward.",
+                    milestone=milestone.name,
                 )
                 for i, day in enumerate(days)
             ],

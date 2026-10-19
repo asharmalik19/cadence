@@ -96,6 +96,7 @@ cd frontend && npm install && cd ..
 uv run uvicorn backend.app.main:app --reload --port 8000
 cd frontend && npm run dev      # open http://localhost:5173 (Vite forwards /api to :8000)
 ```
+If port 8000 is taken by another app, start uvicorn with `--port 8010` and Vite with `API_PORT=8010 npm run dev`.
 
 **Demo / someone trying it** (one program):
 ```bash
@@ -196,7 +197,7 @@ One number field and Continue, shown on first open. PRD ref: `prd.md > Daily Tim
 Today, your goals, and **Add goal** (disabled with a reason at 3 goals). PRD ref: `prd.md > Screens and Layout`, `prd.md > Goal Cap`.
 
 #### Add Goal Dialog (`AddGoalDialog.tsx`)
-Goal text and deadline, then the AI's clarifying questions with an answer box each (skipped if there are none). If the goal is impossible, it shows the AI's message and assumptions and lets you change the date or answers. Once the goal is added, it opens the new goal's view. PRD ref: `prd.md > Adding a Goal`.
+Goal text, then "By when?" with a date picker, then the AI's clarifying questions with an answer box each (skipped if there are none). The clarify call is made after the deadline step, so the questions can depend on it. If the goal is impossible, it shows the AI's message and assumptions and lets you change the date or answers. Once the goal is added, it opens the new goal's view. PRD ref: `prd.md > Adding a Goal`.
 
 #### Today View (`TodayView.tsx`, `TaskCard.tsx`)
 Today's tasks across all goals, each with its done criterion, minutes, why and a tick box, plus the **Next day** button. PRD ref: `prd.md > Today and Marking Done`, `prd.md > States and Boundaries`.
@@ -226,12 +227,15 @@ goals    (id INTEGER PRIMARY KEY,
           smart_goal TEXT NOT NULL,             -- AI-written SMART version of the goal
           clarifications_json TEXT NOT NULL,    -- [{question, answer}] from the add-goal dialog
           breakdown_json TEXT NOT NULL,         -- [{name, minutes_per_week, purpose}]
+          milestones_json TEXT NOT NULL,        -- [{name, target_day, reached_when}]
           last_change TEXT,                     -- latest change note, null = no changes yet
           created_on TEXT NOT NULL)
 
 tasks    (id INTEGER PRIMARY KEY,
           goal_id INTEGER NOT NULL REFERENCES goals(id),
           day TEXT NOT NULL,
+          kind TEXT NOT NULL,                   -- 'concrete' | 'explore'
+          milestone TEXT NOT NULL,              -- name of the milestone it works toward
           title TEXT NOT NULL,
           done_criterion TEXT NOT NULL,
           minutes INTEGER NOT NULL,
@@ -245,9 +249,10 @@ updates  (id INTEGER PRIMARY KEY,
 ```
 
 AI reply shapes (Pydantic, in `backend/app/models.py`):
-- `TaskPlan {day, title, done_criterion, minutes, why}`
+- `TaskPlan {day, kind: "concrete"|"explore", title, done_criterion, minutes, why, milestone}`. For explore tasks, `done_criterion` is a progress criterion.
+- `Milestone {name, target_day, reached_when}`
 - `Workstream {name, minutes_per_week, purpose}`
-- `GoalPlan {goal_id, smart_goal, breakdown: [Workstream], tasks: [TaskPlan], change_note}`. On re-plans, `smart_goal` is the (possibly rewritten) SMART goal
+- `GoalPlan {goal_id, smart_goal, breakdown: [Workstream], milestones: [Milestone], tasks: [TaskPlan], change_note}`; `tasks` cover only the next 14 days (`DETAIL_DAYS`). On re-plans, `smart_goal` is the (possibly rewritten) SMART goal
 - `Clarify {questions: [str]}`: what the AI must know to plan this goal; empty if it's already specific.
 - `NewGoalPlan {smart_goal, assumptions: [str], verdict: "impossible"|"stretch"|"comfortable", message, new_goal: GoalPlan | null, rework: [GoalPlan]}`. `rework` lists only existing goals that change.
 - `Replan {goals: [GoalPlan]}`, covering only goals with misses or new updates.
@@ -326,7 +331,7 @@ sysplanner/
 Exact details for `5-build`. The design is fully described above; this section is lookup material.
 
 ### API Routes in Detail
-Errors map to status codes: 409 for cap and precondition refusals, 502 for AI failure.
+Errors map to status codes: 409 for cap and precondition refusals, 404 for a goal that doesn't exist, 502 for AI failure.
 
 | Method + path | Body | Returns | PRD ref |
 |---|---|---|---|
@@ -334,6 +339,7 @@ Errors map to status codes: 409 for cap and precondition refusals, 502 for AI fa
 | `POST /api/settings` | `{daily_hours: int}` | `AppState` | `prd.md > Daily Time Budget` |
 | `POST /api/goals/clarify` | `{text, deadline}` | `{questions: [str]}` | `prd.md > Adding a Goal`, `prd.md > Goal Cap` |
 | `POST /api/goals` | `{text, deadline, clarifications: [{question, answer}]}` | `{status:"impossible", message, smart_goal, assumptions}` or `{status:"added", goal_id, state}` | `prd.md > Adding a Goal`, `prd.md > Goal Cap`, `prd.md > The System (Breakdown + Day-by-Day Plan)` |
+| `DELETE /api/goals/{id}` | — | `AppState` (goal, its tasks and updates removed; no AI call) | `prd.md > Goal Cap` |
 | `POST /api/tasks/{id}/toggle` | `{done: bool}` | `AppState` | `prd.md > Today and Marking Done` |
 | `POST /api/day/next` | `{updates: [{goal_id, text}]}` | `AppState` | `prd.md > Next Day, Review and Re-plan`, `prd.md > Updates (What Happened)` |
 | `POST /api/goals/{id}/updates` | `{text}` | `AppState` (after re-plan) | `prd.md > Updates (What Happened)` |
@@ -358,6 +364,7 @@ Errors map to status codes: 409 for cap and precondition refusals, 502 for AI fa
   - keep one day a week free of all tasks, placed where it hurts least;
   - be honest about feasibility (impossible vs. stretch vs. comfortable);
   - write change notes in calm, plain words naming days and tasks and saying whether the deadline is still met;
+  - build milestones first, then daily tasks for the next 14 days only; plan open questions as several explore sessions with progress criteria ending in a decide milestone;
   - when the verdict hinges on an unconfirmed assumption, name it in the message and say what the verdict would be if it's wrong;
   - treat the user's updates as facts that override earlier assumptions, and rewrite the SMART goal when an update changes the goal itself.
 
@@ -367,6 +374,7 @@ Errors map to status codes: 409 for cap and precondition refusals, 502 for AI fa
 - Dates fall between the plan's start day and the goal's deadline, inclusive.
 - Every referenced goal exists, and every changed goal has a change note.
 - **Daily budget:** on every day, total minutes across all goals (including the one being added) ≤ `daily_hours × 60`.
+- **Milestones and the detail window:** every plan has at least one milestone, none after the deadline; every task names one of its milestones; no task falls more than 14 days after the plan's start day.
 - **Free day:** every Monday–Sunday week has at least one day with no tasks from any goal. The AI chooses which; an update can move it.
 
 If there are problems, the service calls the planner once more with the problems appended to the prompt. If the second reply also fails, it raises `PlanningFailed` (HTTP 502).
@@ -423,6 +431,7 @@ No other services: no hosting, no cloud database, no auth.
 - **Demo goal switched to the scholarship.** After the 16-products run, the learner judged that goal too uncertain to evaluate the tool by (no ideas yet, heavy personalization). The scholarship goal is specific, common, and tests long-lead steps.
 - **The AI never invents the user's choices.** The 3-products run invented two of the product ideas. The prompt now asks about choices the goal depends on and, if they're undecided, plans the work to make them.
 - **Updates ("what happened") drive re-plans, not just misses.** The learner reframed the first plan as a well-informed draft that improves as real facts arrive. Updates come from the Goal view (re-plan now) and the end-of-day review (re-plan with that day's misses), are stored per goal, and are sent with every later plan (`prd.md > Updates (What Happened)`).
+- **Milestones, two step kinds, and a 14-day detail window.** The learner judged a 2-hour "choose countries" task unrealistic: open questions need several sessions judged on progress. The kernel's daily list stays; detail beyond two weeks is deferred to re-plans (`prd.md > The System (Breakdown + Day-by-Day Plan)`). Existing data files get the new columns via a small in-place upgrade in `db.py`.
 - **One free day a week, not a fixed day off.** The learner works some Sundays but wants one day a week for admin, chores and shopping, and it varies; the rule guarantees one empty day per Monday–Sunday week, the AI places it, and updates move it.
 - **Daily hours instead of weekly.** The learner plans with a deliberately low daily number (8 h, weekends included) as a buffer that forces priorities; days may be uneven so one goal can get a deep day (`prd.md > Daily Time Budget`).
 - **Paid key, not free tier.** On the free key, calls took 40 s–6 min queued at Google; on the paid key the same call takes ~2 s, and a clarify call ~7 s.

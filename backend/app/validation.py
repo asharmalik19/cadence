@@ -1,9 +1,9 @@
 """Code checks on every AI reply. The AI proposes; these rules decide whether we trust it."""
 
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 
-from .models import GoalPlan, NewGoalPlan, PlanContext, Replan, TaskPlan
+from .models import DETAIL_DAYS, GoalPlan, NewGoalPlan, PlanContext, Replan, TaskPlan
 
 MAX_PROBLEMS = 20  # keep the retry prompt short
 
@@ -31,7 +31,7 @@ def check_plan(ctx: PlanContext, reply: NewGoalPlan | Replan) -> list[str]:
             problems.append("The new goal needs a breakdown with at least one workstream.")
         if not new.tasks:
             problems.append("The new goal needs at least one task.")
-        problems += _check_tasks("the new goal", new.tasks, ctx.start_day, ctx.new_goal.deadline)
+        problems += _check_goal_plan("the new goal", new, ctx.start_day, ctx.new_goal.deadline)
         changed = reply.rework
         new_tasks = [(0, t) for t in new.tasks]
     else:
@@ -50,15 +50,24 @@ def check_plan(ctx: PlanContext, reply: NewGoalPlan | Replan) -> list[str]:
             continue
         if not plan.change_note.strip():
             problems.append(f"Goal {plan.goal_id} changed but has no change_note.")
-        problems += _check_tasks(f"goal {plan.goal_id}", plan.tasks, ctx.start_day, deadlines[plan.goal_id])
+        problems += _check_goal_plan(f"goal {plan.goal_id}", plan, ctx.start_day, deadlines[plan.goal_id])
 
     problems += _check_budget(ctx, changed, new_tasks)
     return problems[:MAX_PROBLEMS]
 
 
-def _check_tasks(label: str, tasks: list[TaskPlan], start: date, deadline: date) -> list[str]:
+def _check_goal_plan(label: str, plan: GoalPlan, start: date, deadline: date) -> list[str]:
     problems = []
-    for t in tasks:
+    horizon = min(deadline, start + timedelta(days=DETAIL_DAYS - 1))
+    names = {m.name for m in plan.milestones}
+    if not plan.milestones:
+        problems.append(f"{label} needs at least one milestone.")
+    for m in plan.milestones:
+        if not m.name.strip() or not m.reached_when.strip():
+            problems.append(f"A milestone of {label} needs a name and a reached_when.")
+        if m.target_day > deadline:
+            problems.append(f"Milestone '{m.name}' of {label} is after the deadline {deadline}.")
+    for t in plan.tasks:
         where = f"Task '{t.title or '(untitled)'}' on {t.day} for {label}"
         if not t.title.strip():
             problems.append(f"{where} has no title.")
@@ -72,6 +81,11 @@ def _check_tasks(label: str, tasks: list[TaskPlan], start: date, deadline: date)
             problems.append(f"{where} is before the start day {start}.")
         if t.day > deadline:
             problems.append(f"{where} is after the deadline {deadline}.")
+        elif t.day > horizon:
+            problems.append(f"{where} is beyond the {DETAIL_DAYS}-day detail window (last day {horizon}); "
+                            "plan later work as milestones only.")
+        if t.milestone not in names:
+            problems.append(f"{where} names milestone '{t.milestone}', which isn't in the milestones list.")
     return problems
 
 

@@ -1,0 +1,21 @@
+/* Colors, fonts and spacing (spec.md > Look and Feel). Colors and vibe only from the reference app. */
+:root {
+  --bg: #0f1f17;
+  --surface: #172b20;
+  --surface-raised: #1e3628;
+  --border: #2b4636;
+  --sage: #9bb5a0;
+  --gold: #c9a550;
+  --text: #efeadd;
+
+  --font-serif: 'Cormorant Garamond', Georgia, serif;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+  --radius: 14px;
+  --radius-small: 10px;
+  --pad-card: 24px;
+  --gutter: 32px;
+  --sidebar: 260px;
+
+  color-scheme: dark;
+}

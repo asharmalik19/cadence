@@ -10,12 +10,31 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 
+TaskKind = Literal["concrete", "explore"]
+
+DETAIL_DAYS = 14  # daily tasks are planned this far ahead; beyond it, only milestones
+
+
 class TaskPlan(BaseModel):
     day: date = Field(description="Day the task is done, YYYY-MM-DD.")
+    kind: TaskKind = Field(
+        description='"concrete": a clear output in a predictable time. "explore": one session on an open '
+        "question (research, deciding, reflecting) that spans several days."
+    )
     title: str = Field(description="What to do, short and concrete.")
-    done_criterion: str = Field(description="How the user knows the task is done.")
+    done_criterion: str = Field(
+        description="concrete: the finished output. explore: the progress this session leaves behind "
+        "(notes, a comparison, a conversation), never that the question is settled."
+    )
     minutes: int = Field(description="Time estimate in minutes.")
     why: str = Field(description="One sentence on how this task moves the goal forward.")
+    milestone: str = Field(description="Name of the milestone this task works toward, exactly as in milestones.")
+
+
+class Milestone(BaseModel):
+    name: str = Field(description='A checkpoint on the way to the goal, e.g. "Choose 2-3 countries".')
+    target_day: date = Field(description="Day it should be reached by, YYYY-MM-DD.")
+    reached_when: str = Field(description="What is true once it's reached.")
 
 
 class Workstream(BaseModel):
@@ -27,7 +46,10 @@ class Workstream(BaseModel):
 class GoalPlan(BaseModel):
     goal_id: int = Field(description="Id of the goal. Use 0 for the goal being added.")
     breakdown: list[Workstream]
-    tasks: list[TaskPlan] = Field(description="Every task from the plan's start day to completion.")
+    milestones: list[Milestone] = Field(description="Every milestone from now to the goal, in date order.")
+    tasks: list[TaskPlan] = Field(
+        description=f"Daily tasks for the next {DETAIL_DAYS} days only (or until completion if sooner)."
+    )
     change_note: str = Field(
         description="For a changed existing goal: what changed and whether the deadline is still met. "
         "Empty for the goal being added."
@@ -65,6 +87,8 @@ class Replan(BaseModel):
 class TaskContext(BaseModel):
     id: int
     day: date
+    kind: TaskKind
+    milestone: str
     title: str
     minutes: int
     status: Literal["planned", "done", "missed"]
@@ -82,6 +106,7 @@ class GoalContext(BaseModel):
     clarifications: list[Clarification]
     deadline: date
     breakdown: list[Workstream]
+    milestones: list[Milestone]
     tasks: list[TaskContext]
 
 
@@ -98,3 +123,81 @@ class PlanContext(BaseModel):
     goals: list[GoalContext] = Field(default_factory=list, description="Existing active goals.")
     new_goal: NewGoalRequest | None = None
     replan_goal_ids: list[int] = Field(default_factory=list, description="Goals with misses to re-plan.")
+
+
+# ---------------------------------------------------------------------------
+# API shapes: what the frontend sends and gets back. types.ts mirrors these.
+# ---------------------------------------------------------------------------
+
+
+class Settings(BaseModel):
+    daily_hours: int
+    current_day: date
+
+
+class TaskOut(BaseModel):
+    id: int
+    goal_id: int
+    day: date
+    kind: TaskKind
+    milestone: str
+    title: str
+    done_criterion: str
+    minutes: int
+    why: str
+    status: Literal["planned", "done", "missed"]
+
+
+class TodayTask(TaskOut):
+    goal_text: str
+
+
+class GoalOut(BaseModel):
+    id: int
+    text: str
+    deadline: date
+    feasibility: str | None
+    smart_goal: str
+    clarifications: list[Clarification]
+    breakdown: list[Workstream]
+    milestones: list[Milestone]
+    last_change: str | None
+    created_on: date
+    tasks: list[TaskOut]
+
+
+class AppState(BaseModel):
+    settings: Settings | None
+    goals: list[GoalOut]
+    today: list[TodayTask]
+    max_goals: int
+
+
+class SettingsIn(BaseModel):
+    daily_hours: int = Field(ge=1, le=16)
+
+
+class ClarifyIn(BaseModel):
+    text: str = Field(min_length=1)
+    deadline: date
+
+
+class ClarifyOut(BaseModel):
+    questions: list[str]
+
+
+class AddGoalIn(ClarifyIn):
+    clarifications: list[Clarification] = Field(default_factory=list)
+
+
+class AddGoalImpossible(BaseModel):
+    status: Literal["impossible"] = "impossible"
+    message: str
+    smart_goal: str
+    assumptions: list[str]
+
+
+class AddGoalAdded(BaseModel):
+    status: Literal["added"] = "added"
+    goal_id: int
+    state: AppState

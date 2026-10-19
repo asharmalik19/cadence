@@ -13,7 +13,7 @@ Source: `scope.md > The Core Loop`, `scope.md > What "Working" Looks Like`.
 
 1. **First open.** Before anything else, the user enters how many hours a day they want to plan for, weekends included (e.g. 8). This is the time budget all goals share. It can deliberately be less than the hours they really have: the gap is their buffer, and a tight limit forces the plan to prioritize.
    Then the screen is empty apart from an **Add goal** button and the (empty) **Active Goals** panel on the left.
-2. **Add a goal.** Clicking **Add goal** asks for two things together: the goal (e.g. "Get a scholarship to study abroad") and its deadline.
+2. **Add a goal.** Clicking **Add goal** asks only for the goal, in plain words (e.g. "Get a scholarship to study abroad for a master's"). The first question that follows is always **"By when?"**, answered with a date.
 3. **Clarify, make it SMART, check feasibility.** The user doesn't have to write a perfect goal. The AI first asks only what it needs to plan (usually 2–4 questions tailored to this goal, e.g. "What size is one product?", "How will you build them?"; none if the goal is already specific). The user answers once. The AI then restates the goal as a **SMART goal** (specific, measurable, achievable, time-bound) and judges it against the deadline.
    - **Impossible:** it says clearly why, including what it assumed, and lets the user change the deadline or their answers and try again. This repeats until it's realistic. The goal is not added until then.
    - **Stretch or comfortable:** it goes ahead.
@@ -36,7 +36,7 @@ One main screen with a persistent left panel. The main area switches between vie
 - **Today view (main area, default).** Today's tasks from all active goals, each with a tick box. Holds the **Next day** control.
 - **Goal view (main area).** One goal's full system: the goal, its **SMART version** and deadline, the **breakdown**, the **day-by-day plan**, and the **Last change** note.
 - **Daily hours (first-open step).** Asked once, before the first goal: hours to plan for per day.
-- **Add goal (form/dialog).** Goal text and deadline, then the AI's clarifying questions with answer boxes, then the feasibility response (impossible → change deadline or answers and retry).
+- **Add goal (form/dialog).** Goal text, then "By when?" (deadline), then the AI's clarifying questions with answer boxes, then the feasibility response (impossible → change deadline or answers and retry).
 - **End-of-day review (dialog/step).** Shown after clicking **Next day**: the unticked tasks with tick boxes and a confirm action that triggers the re-plan.
 - **Empty state.** Before any goal exists, the main area is a clear prompt to add your first goal.
 
@@ -67,7 +67,7 @@ Source: `scope.md > The Unique Kernel` (plans goals together).
 ### Adding a Goal
 Source: `scope.md > The POC Boundary`.
 
-- Clicking **Add goal** asks for the goal text and a deadline together. The deadline is required.
+- Clicking **Add goal** asks for the goal in plain words. The next screen asks **"By when?"** with a date picker; the deadline is required. The AI writes its clarifying questions only after it knows the deadline, because the deadline changes which questions matter (weeks away: what's already done; a year away: which direction).
 - **Clarifying questions:** the AI asks only what it needs to plan this goal (none if it's already specific). The user answers once in the dialog.
 - **SMART goal:** the AI restates the goal in SMART form from the goal, answers and deadline. It is shown in the Goal view.
 - The AI checks feasibility before building anything, and an impossible verdict says what it assumed.
@@ -84,18 +84,25 @@ Source: `scope.md > The Unique Kernel` ("caps them").
 
 - Maximum **3** active goals.
   - [ ] With 3 goals active, trying to add a 4th is refused with a plain message. No goal is added.
-  - [ ] There is no way to remove or finish a goal to make room in the POC.
+  - [ ] A goal can be deleted with the small trash icon next to it in the Active Goals panel (gold on hover), after an inline "can't be undone" confirm. Its tasks and updates go with it, which frees a slot. Other goals keep their plans; the freed hours become buffer.
+  - [ ] There is no way to finish or archive a goal in the POC.
 
 ### The System (Breakdown + Day-by-Day Plan)
 Source: `scope.md > Goal vs. System`, `scope.md > The Unique Kernel`.
 
 - **Breakdown:** the ongoing kinds of work the goal needs and the time each gets (e.g. for a scholarship: Research and shortlist programs 3 hrs/week, Essays 5 hrs/week, References and documents 1 hr/week). It's shown on screen because it gives the user confidence in the plan.
-- **Day-by-day plan:** every day from start to completion. Each task has what to do, a done criterion, a time estimate and a why.
+- **Milestones:** dated checkpoints from now to the goal (e.g. "Choose 2–3 countries", "References secured", "Applications submitted"). They are the backbone of the plan and are shown on the Goal view.
+- **Day-by-day plan, two weeks ahead:** daily tasks only for the next 14 days. Beyond that, the milestones guide the plan, and daily steps are filled in as the user makes decisions and shares updates ("rolling-wave" planning). Each task has what to do, a criterion, a time estimate, a why, and the milestone it works toward.
+- **Two kinds of step:**
+  - **Concrete:** a clear output in a predictable time (send the reference emails, upload documents). Its criterion is the finished output.
+  - **Explore:** one session on an open question that can't be settled in one sitting (choosing countries or scholarships, reflecting on what you want). An open question is spread over several explore sessions on different days and ends in a dated "decide" milestone. An explore step's criterion is the **progress** it leaves (notes, a comparison, a conversation), never that the question is settled.
 - The plan is sized to the goal, not the deadline: if the goal needs 10 days, the plan is 10 days.
 - The AI surfaces long-lead or easy-to-miss steps (e.g. things that depend on other people).
 - Plans are made jointly: each goal's plan accounts for the other active goals, and shared work is combined where the AI sees it (best effort).
 - **Adding a goal reworks existing plans** to fit everything into the daily budget. The AI decides how much to change, which may be nothing if there's room.
-  - [ ] Opening a goal shows both its breakdown (work types with time amounts) and its day-by-day plan.
+  - [ ] Opening a goal shows its milestones, its breakdown (work types with time amounts) and its day-by-day plan.
+  - [ ] Daily tasks run at most 14 days ahead; later work appears only as milestones.
+  - [ ] An open question like "which countries?" appears as several explore sessions with progress criteria, followed by a dated decide milestone, not as one timed task.
   - [ ] Every task in the plan has a done criterion, a time estimate and a why that connects it to the goal.
   - [ ] For the scholarship goal, the plan surfaces long-lead steps that depend on other people (e.g. asking for reference letters) early, weeks before they are needed.
   - [ ] After adding a second goal, any change to the first goal's plan is described in its **Last change** note.
@@ -155,8 +162,10 @@ Source: `scope.md > The Unique Kernel` (adapts), decided during `5-build`.
 - **Users only mark wins.** No "mark missed": unticked means not done, which keeps it guilt-free.
 - **End-of-day review on Next day instead of notifications.** It catches forgotten ticks before re-planning. Notifications stay in Later (hard to demo, and out of scope).
 - **Re-plans are always visible, even simple shifts,** through a **Last change** note per goal. Chosen over a re-plan counter, which only shows that a change happened, not what changed.
-- **Cap of 3 active goals,** a plain refusal beyond that, and no remove/finish in the POC. Based on focus advice (1–3 goals) and the scope's "a couple."
+- **Cap of 3 active goals,** a plain refusal beyond that, and no finish/archive in the POC. Based on focus advice (1–3 goals) and the scope's "a couple."
+- **Goals can be deleted.** Added during `5-build`: using the app for a real goal, the learner had to delete the whole data file twice to start over, and with the cap a wrong goal would block a slot for good. Delete only, with an inline confirm and no undo. No AI call: other goals keep their plans until their next re-plan.
 - **Impossible goals are never added.** The user changes the deadline or answers until it's realistic. Stretch goals are fine.
+- **Not every step fits a time box.** Reviewing the first in-app plan, the learner pointed out that "choose your countries in 2 hours" isn't realistic: some steps are open questions that take days of research and reflection. Plans now use milestones as the backbone, two kinds of step (concrete vs. explore, with progress criteria), and detail only two weeks ahead. A fully loose plan was considered and rejected: there is still a clear list every day, because a vague next step is where drift starts.
 - **The tool makes the goal SMART, not the user.** A one-sentence goal was too ambiguous: in the first real AI call, "Build 16 products by the end of 2026" was judged impossible because the AI assumed full production software. The user supplies the goal and deadline (Specific, with the AI's help, and Time-bound); the AI asks what it's missing, writes the SMART version, judges Achievable, and makes it Measurable through done criteria. The answers and SMART goal are saved with the goal and used in every later plan and re-plan.
 - **One daily hours number, entered at first open before any goal,** so the AI plans all goals against a known time limit. Changed from weekly during `5-build`: a weekly limit allowed lopsided days, and the learner plans day by day, deliberately below their real hours ("plan as if you have 40 hours") to keep a buffer and force priorities. Evenness is not required: deep days on one goal are preferred over a little of everything.
 - **Adding a goal reworks existing plans** rather than giving the new goal only leftover time. It's more practical, and the extra AI call is a small cost at 3 goals.
@@ -166,7 +175,7 @@ Source: `scope.md > The Unique Kernel` (adapts), decided during `5-build`.
 ## What We're Building
 - Add goal with required deadline; AI clarifying questions; AI-written SMART goal; feasibility check with the impossible → change and retry loop.
 - AI-built system per goal: breakdown with time amounts and a day-by-day plan (done criterion, time estimate, why per task), sized to the goal and planned jointly across active goals.
-- Active Goals panel (max 3) with a refusal on the 4th.
+- Active Goals panel (max 3) with a refusal on the 4th and a delete icon per goal.
 - Today view across goals with done-ticking.
 - Next day control, end-of-day review, AI re-plan of affected goals.
 - Updates ("what happened") from the Goal view and the end-of-day review, saved with the goal and driving re-plans.
@@ -174,7 +183,7 @@ Source: `scope.md > The Unique Kernel` (adapts), decided during `5-build`.
 - The dark-green/sage/gold look described above.
 
 ## Deferred From the POC
-- **Removing, completing or archiving goals:** the demo never needs to free a slot.
+- **Completing or archiving goals:** delete covers freeing a slot.
 - **Notifications and reminders:** replaced by the end-of-day review; `scope.md > Later`.
 - **Dedicated shared-work merging logic:** the AI does it best effort; `scope.md > Later`.
 - **Accounts, other users, sharing:** single user; `scope.md > Later`.

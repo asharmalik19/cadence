@@ -81,7 +81,7 @@ def test_rework_replaces_planned_tasks_but_keeps_ticked_ones(new_goal_ctx, exist
     # Rework goal 1 down to nothing new: only the 12th's ticked 180 min stays; plus 60 min new = fine.
     new_goal_ctx.goals = [existing_goal]
     reply = FakePlanner(days=1).plan_new_goal(new_goal_ctx)
-    reply.rework = [GoalPlan(goal_id=1, breakdown=existing_goal.breakdown, tasks=[], change_note="Paused.")]
+    reply.rework = [GoalPlan(goal_id=1, breakdown=existing_goal.breakdown, milestones=existing_goal.milestones, tasks=[], change_note="Paused.")]
     assert check_plan(new_goal_ctx, reply) == []
 
 
@@ -89,8 +89,8 @@ def test_changed_goal_needs_a_note_and_must_exist(new_goal_ctx, existing_goal):
     new_goal_ctx.goals = [existing_goal]
     reply = FakePlanner(days=1).plan_new_goal(new_goal_ctx)
     reply.rework = [
-        GoalPlan(goal_id=1, breakdown=[], tasks=[], change_note=""),
-        GoalPlan(goal_id=99, breakdown=[], tasks=[], change_note="x"),
+        GoalPlan(goal_id=1, breakdown=[], milestones=[], tasks=[], change_note=""),
+        GoalPlan(goal_id=99, breakdown=[], milestones=[], tasks=[], change_note="x"),
     ]
     problems = check_plan(new_goal_ctx, reply)
     assert "Goal 1 changed but has no change_note." in problems
@@ -122,3 +122,26 @@ def test_empty_smart_goal_is_a_problem(new_goal_ctx):
     reply = FakePlanner().plan_new_goal(new_goal_ctx)
     reply.smart_goal = ""
     assert "smart_goal must not be empty." in check_plan(new_goal_ctx, reply)
+
+
+def test_tasks_stay_inside_the_14_day_detail_window(new_goal_ctx):
+    reply = FakePlanner(days=2).plan_new_goal(new_goal_ctx)
+    reply.new_goal.tasks[1].day = new_goal_ctx.start_day + timedelta(days=14)
+    reply.new_goal.milestones[0].target_day = new_goal_ctx.start_day + timedelta(days=20)
+    assert any("beyond the 14-day detail window" in p for p in check_plan(new_goal_ctx, reply))
+
+
+def test_milestones_are_required_and_inside_the_deadline(new_goal_ctx):
+    reply = FakePlanner().plan_new_goal(new_goal_ctx)
+    reply.new_goal.milestones[0].target_day = date(2026, 12, 1)
+    assert any("Milestone 'First result' of the new goal is after the deadline" in p for p in check_plan(new_goal_ctx, reply))
+    reply.new_goal.milestones = []
+    problems = check_plan(new_goal_ctx, reply)
+    assert "the new goal needs at least one milestone." in problems
+    assert any("which isn't in the milestones list" in p for p in problems)
+
+
+def test_explore_tasks_are_allowed_alongside_concrete_ones(new_goal_ctx):
+    reply = FakePlanner(days=3).plan_new_goal(new_goal_ctx)
+    assert [t.kind for t in reply.new_goal.tasks] == ["explore", "concrete", "concrete"]
+    assert check_plan(new_goal_ctx, reply) == []
