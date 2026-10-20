@@ -39,7 +39,9 @@ How you plan:
   (research, shortlist, validate, decide by a date) as part of the system, and refer to the options
   generically ("Idea 2") until the user has decided.
 - Plan every day from the start day to completion that has work. Days with no work have no tasks.
-- Each existing goal carries its smart_goal and the user's clarifications; plan against those.
+- Each existing goal carries its smart_goal, the user's clarifications and their updates (things
+  that happened or changed since, oldest first); plan against all of them. Updates are facts and
+  override earlier answers and your own assumptions; a later update overrides an earlier one.
 - Plan all active goals together. The total minutes of all goals on any single day must stay within
   the user's daily_hours. Treat that limit as real: if work doesn't fit, prioritize and cut what
   matters least rather than squeezing. Combine work shared across goals where it makes sense.
@@ -85,12 +87,21 @@ kept automatically; do not repeat them). Its change_note says in plain words wha
 days or tasks moved, were cut, compressed or rebalanced) and whether its deadline is still met.
 Leave unchanged goals out of rework."""
 
-REPLAN = """Some tasks were missed (status "missed"). Re-plan each goal listed in replan_goal_ids from
-the start day onward. Decide how much change is needed: a simple shift is fine, or rebalance, cut,
-or compress if the goal needs it. Return each re-planned goal's full breakdown and every task from
-the start day onward (ticked "done" tasks are kept automatically). Its change_note says in plain
-words exactly what changed (e.g. "Shifted Days 6-14 back by one day") and whether the deadline is
-still met. Do not include goals that are not in replan_goal_ids."""
+REPLAN = """Re-plan each goal listed in replan_goal_ids from the start day onward. replan_reasons says why:
+- "missed tasks": tasks with status "missed" weren't done. Decide how much change is needed: a
+  simple shift is fine, or rebalance, cut, or compress if the goal needs it.
+- "new update from the user": the newest entry in the goal's updates changed something. Treat it as
+  fact and reshape the plan around it (e.g. a real deadline found: lead the milestones and tasks to
+  it; an option dropped: drop its work). If the update changes the goal itself (e.g. "only Germany
+  now"), rewrite smart_goal to match; otherwise repeat smart_goal unchanged.
+- "fewer than 7 days of daily tasks left": extend the daily tasks to the full detail window, toward
+  the next milestones.
+Return each re-planned goal's smart_goal, full breakdown, every milestone, and every task from the
+start day onward to the end of the detail window (ticked "done" tasks are kept automatically; do
+not repeat them). Its change_note says in plain words exactly what changed, naming days by date, never
+"Day 3" (e.g. "Moved Monday's research to Tue 20 Oct and shifted the rest back a day"), names the update it followed if there was one, says so if the SMART goal was
+rewritten, and says whether the deadline is still met. Other goals' tasks stay as they are and
+count toward the daily hours. Do not include goals that are not in replan_goal_ids."""
 
 
 def build_prompt(ctx: PlanContext, kind: str, problems: list[str] | None) -> str:

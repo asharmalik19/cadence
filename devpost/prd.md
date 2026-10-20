@@ -190,6 +190,7 @@ Source: `scope.md > The Unique Kernel` (adapts), decided during `5-build`.
 - **Public hosted version:** clone-and-run with your own API key; `scope.md > Later`.
 - **Re-plan history beyond the last change:** only the latest note is kept visible.
 - **Feedback on a new system before committing to it:** a draft goal you refine with free-text feedback, then commit. Discussed in `4-spec` and deferred because the draft state complicated the cap, Next day and joint re-planning for the POC.
+- **Following the real date:** in the real app, Today reads the system date and shows that day's tasks, closing any days that passed since the last open. The POC keeps the simulated day and **Next day** so the build and demo can move through time (see **Non-Goals**). Decided during `5-build`.
 - **Adding goals in bulk:** rework on add already produces the joint plan; bulk adds a second form and a messier feasibility check.
 
 ## Possible Later Enhancements

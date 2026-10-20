@@ -16,6 +16,8 @@ from .models import (
     TaskContext,
     TaskOut,
     TaskPlan,
+    UpdateContext,
+    UpdateOut,
     Workstream,
 )
 
@@ -115,6 +117,11 @@ def list_goals(conn: sqlite3.Connection) -> list[GoalOut]:
     tasks_by_goal: dict[int, list[TaskOut]] = {}
     for t in conn.execute("SELECT * FROM tasks ORDER BY day, id"):
         tasks_by_goal.setdefault(t["goal_id"], []).append(_task_out(t))
+    updates_by_goal: dict[int, list[UpdateOut]] = {}
+    for u in conn.execute("SELECT * FROM updates ORDER BY id"):
+        updates_by_goal.setdefault(u["goal_id"], []).append(
+            UpdateOut(id=u["id"], goal_id=u["goal_id"], day=u["day"], text=u["text"])
+        )
     return [
         GoalOut(
             id=g["id"],
@@ -127,6 +134,7 @@ def list_goals(conn: sqlite3.Connection) -> list[GoalOut]:
             milestones=[Milestone(**m) for m in json.loads(g["milestones_json"])],
             last_change=g["last_change"],
             created_on=g["created_on"],
+            updates=updates_by_goal.get(g["id"], []),
             tasks=tasks_by_goal.get(g["id"], []),
         )
         for g in conn.execute("SELECT * FROM goals ORDER BY id")
@@ -144,6 +152,7 @@ def goal_contexts(conn: sqlite3.Connection) -> list[GoalContext]:
             deadline=g.deadline,
             breakdown=g.breakdown,
             milestones=g.milestones,
+            updates=[UpdateContext(day=u.day, text=u.text) for u in g.updates],
             tasks=[
                 TaskContext(
                     id=t.id, day=t.day, kind=t.kind, milestone=t.milestone, title=t.title, minutes=t.minutes, status=t.status
@@ -153,6 +162,11 @@ def goal_contexts(conn: sqlite3.Connection) -> list[GoalContext]:
         )
         for g in list_goals(conn)
     ]
+
+
+def get_task(conn: sqlite3.Connection, task_id: int) -> TaskOut | None:
+    row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    return _task_out(row) if row else None
 
 
 def _task_out(row: sqlite3.Row) -> TaskOut:
@@ -178,6 +192,23 @@ def set_settings(conn: sqlite3.Connection, daily_hours: int, current_day: date) 
         "INSERT INTO settings (id, daily_hours, current_day) VALUES (1, ?, ?)",
         (daily_hours, current_day.isoformat()),
     )
+
+
+def set_task_status(conn: sqlite3.Connection, task_id: int, status: str) -> None:
+    conn.execute("UPDATE tasks SET status = ? WHERE id = ?", (status, task_id))
+
+
+def mark_missed(conn: sqlite3.Connection, day: date) -> None:
+    """Whatever is still unticked on `day` counts as missed."""
+    conn.execute("UPDATE tasks SET status = 'missed' WHERE status = 'planned' AND day = ?", (day.isoformat(),))
+
+
+def set_current_day(conn: sqlite3.Connection, day: date) -> None:
+    conn.execute("UPDATE settings SET current_day = ? WHERE id = 1", (day.isoformat(),))
+
+
+def insert_update(conn: sqlite3.Connection, goal_id: int, day: date, text: str) -> None:
+    conn.execute("INSERT INTO updates (goal_id, day, text) VALUES (?, ?, ?)", (goal_id, day.isoformat(), text))
 
 
 def insert_goal(
@@ -228,8 +259,10 @@ def replace_future_tasks(
     breakdown: list[Workstream],
     milestones: list[Milestone],
     note: str,
+    smart_goal: str = "",
 ) -> None:
-    """Swap a goal's still-planned tasks from `from_day` on for new ones. Past and ticked tasks stay."""
+    """Swap a goal's still-planned tasks from `from_day` on for new ones. Past and ticked tasks stay.
+    A non-empty `smart_goal` replaces the goal's SMART version (an update changed the goal itself)."""
     conn.execute(
         "DELETE FROM tasks WHERE goal_id = ? AND status = 'planned' AND day >= ?", (goal_id, from_day.isoformat())
     )
@@ -238,6 +271,8 @@ def replace_future_tasks(
         "UPDATE goals SET breakdown_json = ?, milestones_json = ?, last_change = ? WHERE id = ?",
         (json.dumps([w.model_dump() for w in breakdown]), _milestones_json(milestones), note, goal_id),
     )
+    if smart_goal.strip():
+        conn.execute("UPDATE goals SET smart_goal = ? WHERE id = ?", (smart_goal.strip(), goal_id))
 
 
 def delete_goal(conn: sqlite3.Connection, goal_id: int) -> bool:

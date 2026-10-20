@@ -8,7 +8,18 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from . import config, db, services
-from .models import AddGoalAdded, AddGoalImpossible, AddGoalIn, AppState, ClarifyIn, ClarifyOut, SettingsIn
+from .models import (
+    AddGoalAdded,
+    AddGoalImpossible,
+    AddGoalIn,
+    AppState,
+    ClarifyIn,
+    ClarifyOut,
+    NextDayIn,
+    SettingsIn,
+    ToggleIn,
+    UpdateIn,
+)
 from .planner.base import Planner, PlanningFailed, get_planner
 
 log = logging.getLogger("sysplanner")
@@ -63,7 +74,28 @@ def create_app(conn: sqlite3.Connection | None = None, planner: Planner | None =
     def delete_goal(goal_id: int, request: Request) -> AppState:
         return services.delete_goal(request.app.state.conn, goal_id)
 
+    @app.post("/api/goals/{goal_id}/updates")
+    def add_update(goal_id: int, body: UpdateIn, request: Request) -> AppState:
+        return services.add_update(request.app.state.conn, ask(request), goal_id, body.text)
+
+    @app.post("/api/tasks/{task_id}/toggle")
+    def toggle(task_id: int, body: ToggleIn, request: Request) -> AppState:
+        return services.toggle_task(request.app.state.conn, task_id, body.done)
+
+    @app.post("/api/day/next")
+    def next_day(body: NextDayIn, request: Request) -> AppState:
+        # The planner is only needed if something must be re-planned, so a missing key doesn't block a quiet day.
+        planner = request.app.state.planner or _Unavailable()
+        return services.next_day(request.app.state.conn, planner, body)
+
     return app
+
+
+class _Unavailable:
+    """Stands in for a missing planner; fails calmly only if a re-plan is actually needed."""
+
+    def __getattr__(self, _: str):
+        raise PlanningFailed("The AI planner isn't configured. Check GEMINI_API_KEY in .env.")
 
 
 app = create_app()

@@ -37,6 +37,13 @@ export interface Clarification {
   answer: string
 }
 
+export interface Update {
+  id: number
+  goal_id: number
+  day: string
+  text: string
+}
+
 export interface Goal {
   id: number
   text: string
@@ -48,6 +55,7 @@ export interface Goal {
   milestones: Milestone[]
   last_change: string | null
   created_on: string
+  updates: Update[]
   tasks: Task[]
 }
 
@@ -61,6 +69,11 @@ export interface AppState {
   goals: Goal[]
   today: TodayTask[]
   max_goals: number
+}
+
+export interface DayUpdate {
+  goal_id: number
+  text: string
 }
 
 export interface GoalDraft {

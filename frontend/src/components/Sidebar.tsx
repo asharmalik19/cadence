@@ -9,12 +9,16 @@ interface Props {
   maxGoals: number
   activeGoalId: number | null
   dailyHours: number
+  currentDay: string
+  /** Today's tasks not yet ticked. */
+  todayLeft: number
+  onSelectToday: () => void
   onSelectGoal: (id: number) => void
   onAddGoal: () => void
   onDeleteGoal: (id: number) => Promise<void>
 }
 
-export function Sidebar({ goals, maxGoals, activeGoalId, dailyHours, onSelectGoal, onAddGoal, onDeleteGoal }: Props) {
+export function Sidebar({ goals, maxGoals, activeGoalId, dailyHours, currentDay, todayLeft, onSelectToday, onSelectGoal, onAddGoal, onDeleteGoal }: Props) {
   const [confirmingId, setConfirmingId] = useState<number | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -38,6 +42,17 @@ export function Sidebar({ goals, maxGoals, activeGoalId, dailyHours, onSelectGoa
       <div className="brand">
         Sys<span>Planner</span>
       </div>
+      {goals.length > 0 && (
+        <button className={`today-button${activeGoalId === null ? ' active' : ''}`} onClick={onSelectToday}>
+          <SunIcon />
+          <span>
+            Today
+            <small>
+              {formatDay(currentDay)} · {todayLeft === 0 ? 'all done' : `${todayLeft} to do`}
+            </small>
+          </span>
+        </button>
+      )}
       <nav className="nav">
         <div className="label">
           <span>Active goals</span>
@@ -88,6 +103,15 @@ export function Sidebar({ goals, maxGoals, activeGoalId, dailyHours, onSelectGoa
       </div>
       <div className="sidebar-foot muted">Planning {dailyHours} h a day</div>
     </aside>
+  )
+}
+
+function SunIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" />
+    </svg>
   )
 }
 

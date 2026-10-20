@@ -4,14 +4,16 @@ import { Breakdown } from './Breakdown'
 import { DayPlan } from './DayPlan'
 import { LastChangeNote } from './LastChangeNote'
 import { Milestones } from './Milestones'
+import { UpdateBox } from './UpdateBox'
 
 interface Props {
   goal: Goal
   currentDay: string
+  onAddUpdate: (text: string) => Promise<void>
 }
 
-/** One goal's whole system: SMART goal, breakdown, day-by-day plan, and the last change. */
-export function GoalView({ goal, currentDay }: Props) {
+/** One goal's whole system: SMART goal, last change, what happened, milestones, breakdown, day-by-day plan. */
+export function GoalView({ goal, currentDay, onAddUpdate }: Props) {
   return (
     <div className="goal-view">
       <header className="goal-head">
@@ -45,6 +47,11 @@ export function GoalView({ goal, currentDay }: Props) {
       </section>
 
       <LastChangeNote note={goal.last_change} />
+
+      <section className="section">
+        <h2>What happened</h2>
+        <UpdateBox key={goal.id} updates={goal.updates} onSubmit={onAddUpdate} />
+      </section>
 
       <section className="section">
         <h2>Milestones</h2>

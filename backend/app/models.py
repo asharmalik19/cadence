@@ -45,6 +45,11 @@ class Workstream(BaseModel):
 
 class GoalPlan(BaseModel):
     goal_id: int = Field(description="Id of the goal. Use 0 for the goal being added.")
+    smart_goal: str = Field(
+        default="",
+        description="For an existing goal: its SMART goal, rewritten only if an update changed the goal itself, "
+        "otherwise repeated unchanged. Empty for the goal being added."
+    )
     breakdown: list[Workstream]
     milestones: list[Milestone] = Field(description="Every milestone from now to the goal, in date order.")
     tasks: list[TaskPlan] = Field(
@@ -76,7 +81,7 @@ class NewGoalPlan(BaseModel):
 
 
 class Replan(BaseModel):
-    goals: list[GoalPlan] = Field(description="Only goals that had missed tasks.")
+    goals: list[GoalPlan] = Field(description="Exactly the goals listed in replan_goal_ids.")
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +104,11 @@ class Clarification(BaseModel):
     answer: str
 
 
+class UpdateContext(BaseModel):
+    day: date = Field(description="Day the user wrote it.")
+    text: str = Field(description="Something that happened or changed, in the user's words. Treat it as fact.")
+
+
 class GoalContext(BaseModel):
     id: int
     text: str
@@ -107,6 +117,7 @@ class GoalContext(BaseModel):
     deadline: date
     breakdown: list[Workstream]
     milestones: list[Milestone]
+    updates: list[UpdateContext] = Field(default_factory=list, description="Oldest first.")
     tasks: list[TaskContext]
 
 
@@ -122,7 +133,10 @@ class PlanContext(BaseModel):
     start_day: date = Field(description="First day the reply may plan tasks on.")
     goals: list[GoalContext] = Field(default_factory=list, description="Existing active goals.")
     new_goal: NewGoalRequest | None = None
-    replan_goal_ids: list[int] = Field(default_factory=list, description="Goals with misses to re-plan.")
+    replan_goal_ids: list[int] = Field(default_factory=list, description="Goals to re-plan.")
+    replan_reasons: dict[int, list[str]] = Field(
+        default_factory=dict, description="Why each goal in replan_goal_ids is being re-planned."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +162,13 @@ class TaskOut(BaseModel):
     status: Literal["planned", "done", "missed"]
 
 
+class UpdateOut(BaseModel):
+    id: int
+    goal_id: int
+    day: date
+    text: str
+
+
 class TodayTask(TaskOut):
     goal_text: str
 
@@ -163,6 +184,7 @@ class GoalOut(BaseModel):
     milestones: list[Milestone]
     last_change: str | None
     created_on: date
+    updates: list[UpdateOut]
     tasks: list[TaskOut]
 
 
@@ -201,3 +223,19 @@ class AddGoalAdded(BaseModel):
     status: Literal["added"] = "added"
     goal_id: int
     state: AppState
+
+
+class ToggleIn(BaseModel):
+    done: bool
+
+
+class UpdateIn(BaseModel):
+    text: str = Field(min_length=1)
+
+
+class DayUpdate(UpdateIn):
+    goal_id: int
+
+
+class NextDayIn(BaseModel):
+    updates: list[DayUpdate] = Field(default_factory=list)

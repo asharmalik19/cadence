@@ -1,5 +1,5 @@
 // One typed function per backend route.
-import type { AddGoalResult, AppState, Clarification, GoalDraft } from './types'
+import type { AddGoalResult, AppState, Clarification, DayUpdate, GoalDraft } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -37,3 +37,9 @@ export const addGoal = (draft: GoalDraft, clarifications: Clarification[]) =>
   call<AddGoalResult>('/goals', { ...draft, clarifications })
 
 export const deleteGoal = (goalId: number) => call<AppState>(`/goals/${goalId}`, undefined, 'DELETE')
+
+export const addUpdate = (goalId: number, text: string) => call<AppState>(`/goals/${goalId}/updates`, { text })
+
+export const toggleTask = (taskId: number, done: boolean) => call<AppState>(`/tasks/${taskId}/toggle`, { done })
+
+export const nextDay = (updates: DayUpdate[]) => call<AppState>('/day/next', { updates })

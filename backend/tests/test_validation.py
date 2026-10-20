@@ -99,7 +99,7 @@ def test_changed_goal_needs_a_note_and_must_exist(new_goal_ctx, existing_goal):
 
 def test_replan_must_cover_exactly_the_goals_with_misses(new_goal_ctx, existing_goal):
     ctx = new_goal_ctx.model_copy(update={"new_goal": None, "goals": [existing_goal], "replan_goal_ids": [1]})
-    assert check_plan(ctx, Replan(goals=[])) == ["Goal 1 had missed tasks and must be re-planned."]
+    assert check_plan(ctx, Replan(goals=[])) == ["Goal 1 is in replan_goal_ids and must be re-planned."]
 
 
 def test_broken_reply_gets_one_retry_with_the_problems_listed(new_goal_ctx):

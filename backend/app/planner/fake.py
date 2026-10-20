@@ -58,15 +58,16 @@ class FakePlanner:
         mode = self._next_mode()
         if mode == "fail":
             raise PlanningFailed("Fake planner was told to fail")
+        smart = {g.id: g.smart_goal for g in ctx.goals}
         goals = [
-            self._goal_plan(ctx, gid, "Shifted the remaining tasks back by one day; deadline still met.")
+            self._goal_plan(ctx, gid, "Shifted the remaining tasks back by one day; deadline still met.", smart[gid])
             for gid in ctx.replan_goal_ids
         ]
         if mode == "broken" and goals:
             goals[0].change_note = ""
         return Replan(goals=goals)
 
-    def _goal_plan(self, ctx: PlanContext, goal_id: int, note: str) -> GoalPlan:
+    def _goal_plan(self, ctx: PlanContext, goal_id: int, note: str, smart_goal: str = "") -> GoalPlan:
         days, d = [], ctx.start_day
         while len(days) < self.days:  # one task a day, Sundays free
             if d.weekday() != 6:
@@ -75,6 +76,7 @@ class FakePlanner:
         milestone = Milestone(name="First result", target_day=days[-1], reached_when="The first result exists.")
         return GoalPlan(
             goal_id=goal_id,
+            smart_goal=smart_goal,
             breakdown=[Workstream(name="Build", minutes_per_week=self.minutes * 7, purpose="Make progress.")],
             milestones=[milestone],
             tasks=[

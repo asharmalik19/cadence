@@ -40,9 +40,9 @@ def check_plan(ctx: PlanContext, reply: NewGoalPlan | Replan) -> list[str]:
         returned = {g.goal_id for g in reply.goals}
         for gid in ctx.replan_goal_ids:
             if gid not in returned:
-                problems.append(f"Goal {gid} had missed tasks and must be re-planned.")
+                problems.append(f"Goal {gid} is in replan_goal_ids and must be re-planned.")
         for gid in returned - set(ctx.replan_goal_ids):
-            problems.append(f"Goal {gid} had no missed tasks and must not be in the reply.")
+            problems.append(f"Goal {gid} is not in replan_goal_ids and must not be in the reply.")
 
     for plan in changed:
         if plan.goal_id not in deadlines:
