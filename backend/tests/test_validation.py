@@ -4,7 +4,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from backend.app.models import GoalPlan, Replan, TaskPlan
+from backend.app.models import GoalPlan, Replan, TaskPlan, Workstream
 from backend.app.planner.base import PlanningFailed
 from backend.app.planner.fake import FakePlanner
 from backend.app.services import plan_checked
@@ -43,7 +43,7 @@ def test_daily_limit_is_checked_per_day(new_goal_ctx):
     # 4 h/day limit; 300 min on one day is over 240.
     reply = FakePlanner(minutes=300, days=1).plan_new_goal(new_goal_ctx)
     problems = check_plan(new_goal_ctx, reply)
-    assert problems == ["2026-10-12 has 300 minutes of tasks across all goals, over the daily limit of 240."]
+    assert "2026-10-12 has 300 minutes of tasks across all goals, over the daily limit of 240." in problems
 
 
 def test_every_week_keeps_a_free_day(new_goal_ctx):
@@ -77,22 +77,21 @@ def test_budget_counts_other_goals_tasks(new_goal_ctx, existing_goal):
     assert any("over the daily limit" in p for p in check_plan(new_goal_ctx, reply))
 
 
-def test_rework_replaces_planned_tasks_but_keeps_ticked_ones(new_goal_ctx, existing_goal):
-    # Rework goal 1 down to nothing new: only the 12th's ticked 180 min stays; plus 60 min new = fine.
-    new_goal_ctx.goals = [existing_goal]
-    reply = FakePlanner(days=1).plan_new_goal(new_goal_ctx)
-    reply.rework = [GoalPlan(goal_id=1, breakdown=existing_goal.breakdown, milestones=existing_goal.milestones, tasks=[], change_note="Paused.")]
-    assert check_plan(new_goal_ctx, reply) == []
+def test_replan_replaces_planned_tasks_but_keeps_ticked_ones(new_goal_ctx, existing_goal):
+    # Re-plan goal 1 down to nothing new: only the 12th's ticked 180 min stays, under the 240 limit.
+    ctx = new_goal_ctx.model_copy(update={"new_goal": None, "goals": [existing_goal], "replan_goal_ids": [1]})
+    plan = GoalPlan(goal_id=1, breakdown=existing_goal.breakdown, milestones=existing_goal.milestones, tasks=[],
+                    change_note="Paused.")
+    assert check_plan(ctx, Replan(goals=[plan])) == []
 
 
 def test_changed_goal_needs_a_note_and_must_exist(new_goal_ctx, existing_goal):
-    new_goal_ctx.goals = [existing_goal]
-    reply = FakePlanner(days=1).plan_new_goal(new_goal_ctx)
-    reply.rework = [
+    ctx = new_goal_ctx.model_copy(update={"new_goal": None, "goals": [existing_goal], "replan_goal_ids": [1, 99]})
+    reply = Replan(goals=[
         GoalPlan(goal_id=1, breakdown=[], milestones=[], tasks=[], change_note=""),
         GoalPlan(goal_id=99, breakdown=[], milestones=[], tasks=[], change_note="x"),
-    ]
-    problems = check_plan(new_goal_ctx, reply)
+    ])
+    problems = check_plan(ctx, reply)
     assert "Goal 1 changed but has no change_note." in problems
     assert "Goal 99 does not exist." in problems
 
@@ -145,3 +144,44 @@ def test_explore_tasks_are_allowed_alongside_concrete_ones(new_goal_ctx):
     reply = FakePlanner(days=3).plan_new_goal(new_goal_ctx)
     assert [t.kind for t in reply.new_goal.tasks] == ["explore", "concrete", "concrete"]
     assert check_plan(new_goal_ctx, reply) == []
+
+
+# --- weekly budget (daily hours x 6 working days) -------------------------------
+
+
+def _with_breakdown(goal, minutes_per_week):
+    return goal.model_copy(update={"breakdown": [Workstream(name="Build", minutes_per_week=minutes_per_week, purpose="x")]})
+
+
+def test_a_new_goal_gets_only_the_weekly_time_left(new_goal_ctx, existing_goal):
+    # 4 h x 6 days = 1440 a week. Goal 1 takes 1200, so 240 are left; the new goal asks for 360.
+    new_goal_ctx.goals = [_with_breakdown(existing_goal, 1200)]
+    reply = FakePlanner(days=1).plan_new_goal(new_goal_ctx)
+    reply.new_goal.breakdown[0].minutes_per_week = 360
+    problems = check_plan(new_goal_ctx, reply)
+    assert any("over the weekly budget of 1440" in p and "at most 240 minutes a week" in p for p in problems)
+    reply.new_goal.breakdown[0].minutes_per_week = 240
+    assert check_plan(new_goal_ctx, reply) == []
+
+
+def test_a_goal_past_its_deadline_takes_no_weekly_time(new_goal_ctx, existing_goal):
+    done = _with_breakdown(existing_goal, 1440).model_copy(update={"deadline": date(2026, 10, 11), "tasks": []})
+    new_goal_ctx.goals = [done]
+    reply = FakePlanner(days=1).plan_new_goal(new_goal_ctx)
+    assert check_plan(new_goal_ctx, reply) == []
+
+
+def test_a_replan_may_not_push_the_week_over_budget(new_goal_ctx, existing_goal):
+    goal = _with_breakdown(existing_goal, 720)
+    ctx = new_goal_ctx.model_copy(update={"new_goal": None, "goals": [goal], "replan_goal_ids": [1]})
+    plan = GoalPlan(goal_id=1, breakdown=[Workstream(name="Build", minutes_per_week=1500, purpose="x")],
+                    milestones=goal.milestones, tasks=[], change_note="Grew.")
+    assert any("over the weekly budget" in p for p in check_plan(ctx, Replan(goals=[plan])))
+
+
+def test_an_older_plan_over_budget_can_still_be_replanned_if_it_shrinks(new_goal_ctx, existing_goal):
+    goal = _with_breakdown(existing_goal, 3000)  # saved before the weekly rule existed
+    ctx = new_goal_ctx.model_copy(update={"new_goal": None, "goals": [goal], "replan_goal_ids": [1]})
+    plan = GoalPlan(goal_id=1, breakdown=[Workstream(name="Build", minutes_per_week=2000, purpose="x")],
+                    milestones=goal.milestones, tasks=[], change_note="Shrunk.")
+    assert check_plan(ctx, Replan(goals=[plan])) == []

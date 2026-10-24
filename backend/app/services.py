@@ -89,7 +89,8 @@ def clarify_goal(conn: sqlite3.Connection, planner: Planner, body: ClarifyIn) ->
 
 
 def add_goal(conn: sqlite3.Connection, planner: Planner, body: AddGoalIn) -> AddGoalImpossible | AddGoalAdded:
-    """Step 2: SMART goal, verdict and system. Impossible goals are never saved."""
+    """Step 2: SMART goal, verdict and system. Impossible goals are never saved. The new goal gets only the
+    time the existing goals leave free; their plans don't change."""
     settings = _check_can_add(conn, body.deadline)
     request = NewGoalRequest(text=body.text, deadline=body.deadline, clarifications=body.clarifications)
     ctx = _new_goal_context(conn, settings, request)
@@ -110,10 +111,6 @@ def add_goal(conn: sqlite3.Connection, planner: Planner, body: AddGoalIn) -> Add
             created_on=settings.current_day,
         )
         db.insert_tasks(conn, goal_id, reply.new_goal.tasks)
-        for plan in reply.rework:  # other goals reshaped to make room
-            db.replace_future_tasks(
-                conn, plan.goal_id, ctx.start_day, plan.tasks, plan.breakdown, plan.milestones, plan.change_note
-            )
     return AddGoalAdded(goal_id=goal_id, state=get_state(conn))
 
 

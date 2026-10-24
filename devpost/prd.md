@@ -18,7 +18,7 @@ Source: `scope.md > The Core Loop`, `scope.md > What "Working" Looks Like`.
    - **Impossible:** it says clearly why, including what it assumed, and lets the user change the deadline or their answers and try again. This repeats until it's realistic. The goal is not added until then.
    - **Stretch or comfortable:** it goes ahead.
 4. **System is built.** The goal appears in **Active Goals**. Its system has two parts: a **breakdown** (the kinds of ongoing work the goal needs and how much time each gets) and a **day-by-day plan** to completion, sized to what the goal needs rather than stretched to the deadline.
-5. **More goals.** The user adds up to **3** active goals, one at a time. Adding a goal re-plans the existing goals too, so all plans fit the daily budget together. Any existing goal whose plan changes gets a **Last change** note. Trying to add a 4th is refused.
+5. **More goals.** The user adds up to **3** active goals, one at a time. Each new goal is planned into the time the existing goals leave free, so all plans together fit the daily and weekly budget; existing plans don't change. A goal that doesn't fit the time left is refused with how much time is free. Trying to add a 4th is refused.
 6. **Today.** On a normal open, the main area shows **Today**: every task due today across all active goals. Each task shows what to do, its done criterion, a time estimate, and why it moves the goal forward.
 7. **Mark wins.** During or at the end of the day, the user ticks tasks they finished. They never mark a task as missed.
 8. **Next day → review.** Clicking **Next day** first opens a **review of today** listing every task still unticked: "Tick any you actually did." The user ticks any they forgot, and can write an optional **update** per goal: anything that happened or changed ("DAAD deadline is 30 Nov", "dropping Dubai").
@@ -56,11 +56,13 @@ Source: `scope.md > The Unique Kernel` (plans goals together).
 
 - On first open, before any goal can be added, the user enters the hours per day to plan for (every day, weekends included).
 - All active goals' tasks on any single day together must fit within that daily limit. The AI treats it as real: if work doesn't fit, it prioritizes and cuts what matters least instead of squeezing.
+- **The whole plan fits the week too, not just the next two weeks.** The weekly budget is the daily hours × 6 working days (e.g. 6 h → 36 h). All goals' breakdowns (hours per week out to their deadlines) together must stay within it.
 - Days don't have to be even. The AI may give one goal a deep day and another goal the next day, grouping related work so the user can focus.
 - **One free day a week.** Every Monday–Sunday week keeps at least one day with no planned tasks, for admin, chores and rest (e.g. 8 h × 6 days = 48 planned hours). It isn't a fixed weekday: the AI picks where it hurts least, and the user moves it with an update ("admin on Thursday this week").
 - **Resilience to the unplanned.** A coffee with a friend or a lost afternoon needs no special handling: the daily limit sits below the user's real hours as a buffer; an unfinished task is simply left unticked and re-planned at Next day; anything bigger is an update.
   - [ ] On first open, the hours question appears before **Add goal** is usable.
   - [ ] No day's combined time estimates across all active goals exceed the daily limit.
+  - [ ] All active goals' breakdowns together never exceed the weekly budget (daily hours × 6).
   - [ ] Every week of the plan has at least one day with no tasks from any goal, and the Goal view shows it as a free day.
 - *(Assumption: set once and not editable in the POC.)*
 
@@ -99,7 +101,9 @@ Source: `scope.md > Goal vs. System`, `scope.md > The Unique Kernel`.
 - The plan is sized to the goal, not the deadline: if the goal needs 10 days, the plan is 10 days.
 - The AI surfaces long-lead or easy-to-miss steps (e.g. things that depend on other people).
 - Plans are made jointly: each goal's plan accounts for the other active goals, and shared work is combined where the AI sees it (best effort).
-- **Adding a goal reworks existing plans** to fit everything into the daily budget. The AI decides how much to change, which may be nothing if there's room.
+- **A new goal gets only the time left over.** Existing goals keep their plans when a goal is added; the new goal is planned into the daily and weekly time they leave free. If it can't reach its deadline in that time, it is refused as impossible, and the message says how much time is left and what would free more (a later deadline, or deleting a goal).
+  - [ ] Adding a goal never changes an existing goal's plan.
+  - [ ] A goal that doesn't fit the time left is refused with how many hours a week are free.
   - [ ] Opening a goal shows its milestones, its breakdown (work types with time amounts) and its day-by-day plan.
   - [ ] Daily tasks run at most 14 days ahead; later work appears only as milestones.
   - [ ] An open question like "which countries?" appears as several explore sessions with progress criteria, followed by a dated decide milestone, not as one timed task.
@@ -142,7 +146,7 @@ Source: `scope.md > The Unique Kernel` (adapts), decided during `5-build`.
   - [ ] Updates stay visible on the goal's page, and later re-plans still respect them.
 
 ### Last Change Note
-- Each goal shows a **Last change** note describing what the most recent re-plan did (after a miss, an update, or another goal was added), in plain words, whether it was a simple shift or a deeper reshape.
+- Each goal shows a **Last change** note describing what the most recent re-plan did (after a miss or an update), in plain words, whether it was a simple shift or a deeper reshape.
   - [ ] After a re-plan, the affected goal's **Last change** note says what changed (which days or tasks moved, were cut, compressed or rebalanced) and whether the deadline is still met.
   - [ ] A goal that has never been re-planned shows no last-change content (or an equivalent "no changes yet").
 
@@ -168,8 +172,8 @@ Source: `scope.md > The Unique Kernel` (adapts), decided during `5-build`.
 - **Not every step fits a time box.** Reviewing the first in-app plan, the learner pointed out that "choose your countries in 2 hours" isn't realistic: some steps are open questions that take days of research and reflection. Plans now use milestones as the backbone, two kinds of step (concrete vs. explore, with progress criteria), and detail only two weeks ahead. A fully loose plan was considered and rejected: there is still a clear list every day, because a vague next step is where drift starts.
 - **The tool makes the goal SMART, not the user.** A one-sentence goal was too ambiguous: in the first real AI call, "Build 16 products by the end of 2026" was judged impossible because the AI assumed full production software. The user supplies the goal and deadline (Specific, with the AI's help, and Time-bound); the AI asks what it's missing, writes the SMART version, judges Achievable, and makes it Measurable through done criteria. The answers and SMART goal are saved with the goal and used in every later plan and re-plan.
 - **One daily hours number, entered at first open before any goal,** so the AI plans all goals against a known time limit. Changed from weekly during `5-build`: a weekly limit allowed lopsided days, and the learner plans day by day, deliberately below their real hours ("plan as if you have 40 hours") to keep a buffer and force priorities. Evenness is not required: deep days on one goal are preferred over a little of everything.
-- **Adding a goal reworks existing plans** rather than giving the new goal only leftover time. It's more practical, and the extra AI call is a small cost at 3 goals.
-- **No bulk add.** With rework, adding one at a time reaches the same joint plan, and bulk would complicate the feasibility loop.
+- **A new goal gets the leftover time; existing plans don't change on add.** Changed during `5-build` (it was "adding a goal reworks existing plans"): the first live three-goal run showed the AI never reworked anything, and nothing checked the long-term plan, so three goals' breakdowns added up to 50 h a week against a 36 h budget. The learner chose leftover time plus a code-checked weekly budget: simple, predictable, and the total never exceeds their time. Smarter rebalancing (by deadline or by a priority the user picks) waits until real use shows it's needed.
+- **No bulk add.** Adding one at a time is simpler, and bulk would complicate the feasibility loop.
 - **Working name: SysPlanner,** to be revisited once the project is ready. Noted concerns: "sys" can read as IT jargon, and "planner" undersells that the tool does the planning.
 
 ## What We're Building
@@ -191,7 +195,8 @@ Source: `scope.md > The Unique Kernel` (adapts), decided during `5-build`.
 - **Re-plan history beyond the last change:** only the latest note is kept visible.
 - **Feedback on a new system before committing to it:** a draft goal you refine with free-text feedback, then commit. Discussed in `4-spec` and deferred because the draft state complicated the cap, Next day and joint re-planning for the POC.
 - **Following the real date:** in the real app, Today reads the system date and shows that day's tasks, closing any days that passed since the last open. The POC keeps the simulated day and **Next day** so the build and demo can move through time (see **Non-Goals**). Decided during `5-build`.
-- **Adding goals in bulk:** rework on add already produces the joint plan; bulk adds a second form and a messier feasibility check.
+- **Adding goals in bulk:** bulk adds a second form and a messier feasibility check.
+- **Rebalancing goals when a new one doesn't fit:** rework existing plans by deadline and need, or by a priority the user picks, instead of offering only the leftover time. Deferred during `5-build` until real use shows it's needed.
 
 ## Possible Later Enhancements
 - A re-plan history or counter per goal, to spot goals that keep slipping (worded so it doesn't feel like a guilt score).

@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 TaskKind = Literal["concrete", "explore"]
 
 DETAIL_DAYS = 14  # daily tasks are planned this far ahead; beyond it, only milestones
+WORK_DAYS_PER_WEEK = 6  # every week keeps one free day, so the weekly budget is daily hours x 6
 
 
 class TaskPlan(BaseModel):
@@ -77,7 +78,6 @@ class NewGoalPlan(BaseModel):
         description="If impossible: why the deadline is too short. Otherwise a one-line summary of the plan."
     )
     new_goal: GoalPlan | None = Field(description="The new goal's system. Null when impossible.")
-    rework: list[GoalPlan] = Field(description="Only existing goals whose plans change. Empty if none.")
 
 
 class Replan(BaseModel):

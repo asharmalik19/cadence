@@ -1,6 +1,7 @@
 """The instructions sent to the AI. Plan quality is tuned here."""
 
-from ..models import PlanContext
+from ..models import WORK_DAYS_PER_WEEK, PlanContext
+from ..validation import weekly_budget, weekly_used
 
 SYSTEM = """You are the planner inside SysPlanner. The user gives you goals and deadlines; you own the
 system that gets them there, so the user never has to plan or re-plan themselves.
@@ -43,8 +44,10 @@ How you plan:
   that happened or changed since, oldest first); plan against all of them. Updates are facts and
   override earlier answers and your own assumptions; a later update overrides an earlier one.
 - Plan all active goals together. The total minutes of all goals on any single day must stay within
-  the user's daily_hours. Treat that limit as real: if work doesn't fit, prioritize and cut what
-  matters least rather than squeezing. Combine work shared across goals where it makes sense.
+  the user's daily_hours, and the breakdowns of all goals together (minutes per week) must stay
+  within the weekly budget: daily_hours on 6 working days. Treat these limits as real: if work
+  doesn't fit, prioritize and cut what matters least rather than squeezing. Combine work shared
+  across goals where it makes sense.
 - Prefer longer focused sessions on one goal over many small tasks spread across goals: group related
   work on the same day so the user can go deep. Days don't need to be even.
 - Every Monday-Sunday week keeps at least one day with no tasks from any goal: the user's day for
@@ -67,10 +70,12 @@ user's answers: treat the answers as facts, never override them with your own ex
 First restate the goal as one SMART sentence in smart_goal (specific, measurable, achievable,
 time-bound) built from the goal text, the answers and the deadline, and list in `assumptions`
 anything you still had to assume. Assumptions are about circumstances, never about choices the
-user hasn't made (see the rule on decisions). Then judge feasibility honestly against the deadline, the
-daily hours, and the other active goals:
+user hasn't made (see the rule on decisions). Then judge feasibility honestly against the deadline and the
+time left in the week (see "Weekly time" below):
 - "impossible": the deadline is too short for this goal even with a stretch. Explain why in
-  `message` in one or two calm sentences, set new_goal to null and rework to [].
+  `message` in one or two calm sentences and set new_goal to null. If it's impossible only because
+  the other goals leave too little time, say how many hours a week are left and that a later
+  deadline or removing another goal would free time.
 - "stretch": hard but doable. "comfortable": doable with room to spare.
 If the deadline forces you to compress steps below what a first-timer realistically needs, say so
 plainly in `message` and list which steps were compressed in `assumptions`. If even a compressed
@@ -81,11 +86,9 @@ wrong, so the user knows which one fact to check first.
 
 If it is not impossible, return the new goal's system in new_goal (goal_id 0, change_note ""),
 with tasks from the start day to completion, and a one-line summary in `message`.
-If existing goals must change so everything fits the daily hours, return each changed goal in
-`rework` with its full breakdown and every task from the start day onward (ticked "done" tasks are
-kept automatically; do not repeat them). Its change_note says in plain words what changed (which
-days or tasks moved, were cut, compressed or rebalanced) and whether its deadline is still met.
-Leave unchanged goals out of rework."""
+Existing goals keep their plans exactly as they are: the new goal gets only the time they leave
+free. Its breakdown totals at most the weekly minutes left, and its daily tasks fit beside the other
+goals' tasks on each day within daily_hours."""
 
 REPLAN = """Re-plan each goal listed in replan_goal_ids from the start day onward. replan_reasons says why:
 - "missed tasks": tasks with status "missed" weren't done. Decide how much change is needed: a
@@ -101,7 +104,8 @@ start day onward to the end of the detail window (ticked "done" tasks are kept a
 not repeat them). Its change_note says in plain words exactly what changed, naming days by date, never
 "Day 3" (e.g. "Moved Monday's research to Tue 20 Oct and shifted the rest back a day"), names the update it followed if there was one, says so if the SMART goal was
 rewritten, and says whether the deadline is still met. Other goals' tasks stay as they are and
-count toward the daily hours. Do not include goals that are not in replan_goal_ids."""
+count toward the daily hours. A re-planned goal's breakdown may use its current weekly minutes plus
+any weekly minutes left, no more. Do not include goals that are not in replan_goal_ids."""
 
 
 def build_prompt(ctx: PlanContext, kind: str, problems: list[str] | None) -> str:
@@ -109,6 +113,7 @@ def build_prompt(ctx: PlanContext, kind: str, problems: list[str] | None) -> str
     parts = [
         task,
         f"Today is {ctx.today} ({ctx.today:%A}). The start day is {ctx.start_day}.",
+        _weekly_time(ctx),
         "Context (JSON):",
         ctx.model_dump_json(indent=1),
     ]
@@ -118,3 +123,10 @@ def build_prompt(ctx: PlanContext, kind: str, problems: list[str] | None) -> str
             + "\n- ".join(problems)
         )
     return "\n\n".join(parts)
+
+
+def _weekly_time(ctx: PlanContext) -> str:
+    budget, used = weekly_budget(ctx), weekly_used(ctx)
+    return (f"Weekly time: the budget is {budget} minutes a week ({ctx.daily_hours} h x {WORK_DAYS_PER_WEEK} "
+            f"working days). The existing goals' breakdowns use {used}, so {max(budget - used, 0)} minutes a "
+            "week are left.")

@@ -6,6 +6,7 @@ from datetime import date
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import config, db, services
 from .models import (
@@ -23,6 +24,8 @@ from .models import (
 from .planner.base import Planner, PlanningFailed, get_planner
 
 log = logging.getLogger("sysplanner")
+
+FRONTEND_DIST = config.ROOT / "frontend" / "dist"
 
 
 def create_app(conn: sqlite3.Connection | None = None, planner: Planner | None = None) -> FastAPI:
@@ -87,6 +90,11 @@ def create_app(conn: sqlite3.Connection | None = None, planner: Planner | None =
         # The planner is only needed if something must be re-planned, so a missing key doesn't block a quiet day.
         planner = request.app.state.planner or _Unavailable()
         return services.next_day(request.app.state.conn, planner, body)
+
+    # Demo mode: after `npm run build`, this one server also serves the screens at /. Mounted last so
+    # /api routes win. In development there is no build and Vite serves the screens instead.
+    if FRONTEND_DIST.is_dir():
+        app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
 
     return app
 

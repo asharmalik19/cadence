@@ -28,7 +28,7 @@ PRD ref: `prd.md > The Core Journey`.
 2. **Add a goal.** You enter "Get a scholarship to study abroad" and its deadline. The frontend sends it (`POST /api/goals/clarify`). The backend checks the cap, then makes one small AI call that returns the questions Gemini needs answered to plan this goal (possibly none). The dialog shows them with answer boxes.
 3. **SMART goal, feasibility + system.** You answer once and the frontend sends goal, deadline and answers (`POST /api/goals`), showing "Planning…". The backend checks the cap again, then makes one AI call with your daily hours, the current day, the existing goals, and the new goal with its answers. Gemini replies with a SMART version of the goal, the assumptions it made, and a verdict:
    - **Impossible:** the backend saves nothing and returns the message and assumptions. The dialog shows them and lets you change the deadline or your answers. You submit again, which is a fresh call.
-   - **Stretch / comfortable:** the reply also contains the new goal's breakdown and day-by-day plan, plus any rework of existing goals. The backend checks the rules, then in one transaction saves the new goal and applies the rework (replacing existing goals' unticked tasks from today onward and writing their **Last change** notes). The goal appears in the sidebar and its Goal view opens.
+   - **Stretch / comfortable:** the reply also contains the new goal's breakdown and day-by-day plan, planned only into the time the existing goals leave free (their plans don't change). The backend checks the rules, including the weekly budget, then saves the new goal in one transaction. The goal appears in the sidebar and its Goal view opens.
 4. **More goals.** Steps 2–3 repeat for goals 2 and 3. A 4th gets a plain refusal from the backend (HTTP 409) before any AI call. The saved answers and SMART goal travel with the goal into every later plan and re-plan, so the AI never falls back to guessing.
 5. **Today.** `GET /api/state` returns today's tasks across all goals, labelled by goal. Ticking one sends `POST /api/tasks/{id}/toggle`; the backend saves it and the frontend refreshes state.
 6. **Next day → review.** The frontend opens the review dialog: today's unticked tasks (ticks there use the same toggle call) plus an optional update box per goal. With nothing unticked, it shows only the update boxes.
@@ -178,7 +178,7 @@ PRD ref: `prd.md > Goal Cap`, `prd.md > Next Day, Review and Re-plan`, `prd.md >
 Builds the prompt, calls the AI and returns a plan in a fixed shape. There are three interchangeable versions: **Gemini** (the real one), **OpenAI** (an empty slot) and **Fake** (canned plans so tests don't need the AI). `.env` picks which one runs. PRD ref: `prd.md > The System (Breakdown + Day-by-Day Plan)`, `prd.md > Adding a Goal`, `prd.md > Last Change Note`.
 
 #### Validation (`backend/app/validation.py`)
-Checks every AI plan against the rules: complete tasks, dates inside the deadline, no day over the daily hours. If a plan fails, the AI gets one retry with the problems listed. If it fails again, you see the calm "planning failed" message and nothing changes. PRD ref: `prd.md > Daily Time Budget`, `prd.md > The System (Breakdown + Day-by-Day Plan)`.
+Checks every AI plan against the rules: complete tasks, dates inside the deadline, no day over the daily hours, no week over the weekly budget. If a plan fails, the AI gets one retry with the problems listed. If it fails again, you see the calm "planning failed" message and nothing changes. PRD ref: `prd.md > Daily Time Budget`, `prd.md > The System (Breakdown + Day-by-Day Plan)`.
 
 #### Store (`backend/app/db.py`)
 Opens the SQLite file (and creates it on first run) and saves all-or-nothing. Tests use a throwaway copy. PRD ref: `prd.md > Open Questions` (data across sessions).
@@ -254,16 +254,16 @@ AI reply shapes (Pydantic, in `backend/app/models.py`):
 - `Workstream {name, minutes_per_week, purpose}`
 - `GoalPlan {goal_id, smart_goal, breakdown: [Workstream], milestones: [Milestone], tasks: [TaskPlan], change_note}`; `tasks` cover only the next 14 days (`DETAIL_DAYS`). On re-plans, `smart_goal` is the (possibly rewritten) SMART goal
 - `Clarify {questions: [str]}`: what the AI must know to plan this goal; empty if it's already specific.
-- `NewGoalPlan {smart_goal, assumptions: [str], verdict: "impossible"|"stretch"|"comfortable", message, new_goal: GoalPlan | null, rework: [GoalPlan]}`. `rework` lists only existing goals that change.
+- `NewGoalPlan {smart_goal, assumptions: [str], verdict: "impossible"|"stretch"|"comfortable", message, new_goal: GoalPlan | null}`. Existing goals never change on add (`prd.md > Product Decisions`).
 - `Replan {goals: [GoalPlan]}`, covering only goals with misses or new updates.
 
 | Data | Where it lives | How it's updated | When you leave and come back |
 |---|---|---|---|
 | Daily hours, current day | `settings` row | set once; `current_day` +1 on Next day | same day, same hours |
-| Goal + breakdown | `goals` row | written on add (with SMART goal and answers); breakdown replaced on rework or re-plan | unchanged |
-| Tasks | `tasks` rows | Adding a goal inserts its tasks and applies the rework: existing goals' still-`planned` tasks from the current day onward are replaced (ticked ones stay). Re-plan replaces tasks from tomorrow onward. Past and ticked tasks are never rewritten | ticks and history intact |
+| Goal + breakdown | `goals` row | written on add (with SMART goal and answers); breakdown replaced on re-plan | unchanged |
+| Tasks | `tasks` rows | Adding a goal inserts its tasks; existing goals' tasks are untouched. Re-plan replaces tasks from tomorrow onward. Past and ticked tasks are never rewritten | ticks and history intact |
 | Ticks | `tasks.status` | toggle sets `done`/`planned` (current day only); Next day sets leftover `planned` → `missed` | intact |
-| Last change note | `goals.last_change` | overwritten by add-goal rework or re-plan | intact |
+| Last change note | `goals.last_change` | overwritten by re-plan | intact |
 | Updates | `updates` rows | appended from the Goal view or end-of-day review; never edited | intact, sent with every later plan |
 | Which view is open, dialog state | React state only | clicks | resets to Today (fine for the POC) |
 
@@ -374,6 +374,7 @@ Errors map to status codes: 409 for cap and precondition refusals, 404 for a goa
 - Dates fall between the plan's start day and the goal's deadline, inclusive.
 - Every referenced goal exists, and every changed goal has a change note.
 - **Daily budget:** on every day, total minutes across all goals (including the one being added) ≤ `daily_hours × 60`.
+- **Weekly budget:** all active goals' breakdowns (`minutes_per_week`) together ≤ `daily_hours × 60 × 6`. A new goal may use only what the others leave. A re-plan may not push the total over the budget; a total already over it (from a plan saved before this rule) may only shrink. Goals past their deadline count for nothing. The prompt states the budget, the minutes used and the minutes left.
 - **Milestones and the detail window:** every plan has at least one milestone, none after the deadline; every task names one of its milestones; no task falls more than 14 days after the plan's start day.
 - **Free day:** every Monday–Sunday week has at least one day with no tasks from any goal. The AI chooses which; an update can move it.
 
@@ -402,7 +403,7 @@ No other services: no hosting, no cloud database, no auth.
 
 ## Important Failure Modes
 
-- **AI reply is too big or slow.** A long goal (e.g. a scholarship months away, or 16 products by year end) can run 80+ days with several tasks each, and adding a goal can also return rework for others. → The prompt keeps task text short and returns only changed goals. The UI shows "Planning…" for as long as it takes. The first build step measures one real call (see **Decisions and Open Issues**). If it's too large, fall back to detailed tasks for the next 14 days plus one summary line per later day.
+- **AI reply is too big or slow.** A long goal (e.g. a scholarship months away, or 16 products by year end) can run 80+ days with several tasks each, → The prompt keeps task text short and returns only changed goals. The UI shows "Planning…" for as long as it takes. The first build step measures one real call (see **Decisions and Open Issues**). If it's too large, fall back to detailed tasks for the next 14 days plus one summary line per later day.
 - **AI reply breaks a rule** (over budget, missing why, past deadline). → One automatic retry with the problems listed. Then the calm "Planning didn't work this time. Nothing was changed." with Try again.
 - **AI unavailable or bad key.** → Same calm error. Nothing saved, the day doesn't advance. A missing key is reported clearly at startup in the terminal.
 

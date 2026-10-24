@@ -39,7 +39,6 @@ class FakePlanner:
                 verdict="impossible",
                 message="That deadline is too short for this goal.",
                 new_goal=None,
-                rework=[],
             )
         plan = self._goal_plan(ctx, 0, "")
         if mode == "broken":
@@ -50,7 +49,6 @@ class FakePlanner:
             verdict="stretch",
             message="A focused plan.",
             new_goal=plan,
-            rework=[],
         )
 
     def replan(self, ctx: PlanContext, problems: list[str] | None = None) -> Replan:
@@ -77,7 +75,7 @@ class FakePlanner:
         return GoalPlan(
             goal_id=goal_id,
             smart_goal=smart_goal,
-            breakdown=[Workstream(name="Build", minutes_per_week=self.minutes * 7, purpose="Make progress.")],
+            breakdown=[Workstream(name="Build", minutes_per_week=self.minutes * 6, purpose="Make progress.")],
             milestones=[milestone],
             tasks=[
                 TaskPlan(

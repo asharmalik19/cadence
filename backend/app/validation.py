@@ -3,7 +3,7 @@
 from collections import defaultdict
 from datetime import date, timedelta
 
-from .models import DETAIL_DAYS, GoalPlan, NewGoalPlan, PlanContext, Replan, TaskPlan
+from .models import DETAIL_DAYS, WORK_DAYS_PER_WEEK, GoalPlan, NewGoalPlan, PlanContext, Replan, TaskPlan, Workstream
 
 MAX_PROBLEMS = 20  # keep the retry prompt short
 
@@ -32,11 +32,11 @@ def check_plan(ctx: PlanContext, reply: NewGoalPlan | Replan) -> list[str]:
         if not new.tasks:
             problems.append("The new goal needs at least one task.")
         problems += _check_goal_plan("the new goal", new, ctx.start_day, ctx.new_goal.deadline)
-        changed = reply.rework
-        new_tasks = [(0, t) for t in new.tasks]
+        changed = []  # existing goals keep their plans; the new goal gets the time they leave free
+        new_plan = new
     else:
         changed = reply.goals
-        new_tasks = []
+        new_plan = None
         returned = {g.goal_id for g in reply.goals}
         for gid in ctx.replan_goal_ids:
             if gid not in returned:
@@ -52,8 +52,42 @@ def check_plan(ctx: PlanContext, reply: NewGoalPlan | Replan) -> list[str]:
             problems.append(f"Goal {plan.goal_id} changed but has no change_note.")
         problems += _check_goal_plan(f"goal {plan.goal_id}", plan, ctx.start_day, deadlines[plan.goal_id])
 
-    problems += _check_budget(ctx, changed, new_tasks)
+    problems += _check_budget(ctx, changed, new_plan.tasks if new_plan else [])
+    problems += _check_weekly(ctx, changed, new_plan)
     return problems[:MAX_PROBLEMS]
+
+
+def weekly_budget(ctx: PlanContext) -> int:
+    """Minutes a week all goals may share: daily hours on every day but the free one."""
+    return ctx.daily_hours * 60 * WORK_DAYS_PER_WEEK
+
+
+def weekly_used(ctx: PlanContext) -> int:
+    """Minutes a week the existing goals' breakdowns take. Goals past their deadline take none."""
+    return sum(_weekly(g.breakdown) for g in ctx.goals if g.deadline >= ctx.start_day)
+
+
+def _weekly(breakdown: list[Workstream]) -> int:
+    return sum(w.minutes_per_week for w in breakdown)
+
+
+def _check_weekly(ctx: PlanContext, changed: list[GoalPlan], new_plan: GoalPlan | None) -> list[str]:
+    """All goals' breakdowns together fit the weekly budget. A new goal must fit in what's left. A re-plan
+    may not push the total over the budget (a total already over it from an older plan may only shrink)."""
+    budget, before = weekly_budget(ctx), weekly_used(ctx)
+    plans = {p.goal_id: p.breakdown for p in changed}
+    after = sum(_weekly(plans.get(g.id, g.breakdown)) for g in ctx.goals if g.deadline >= ctx.start_day)
+    if new_plan is not None:
+        after += _weekly(new_plan.breakdown)
+    if after <= budget or (new_plan is None and after <= before):
+        return []
+    problem = (f"All goals' breakdowns add up to {after} minutes a week, over the weekly budget of {budget} "
+               f"({ctx.daily_hours} h x {WORK_DAYS_PER_WEEK} working days).")
+    if new_plan is not None:
+        problem += (f" The other goals use {before}, so the new goal's breakdown may total at most "
+                    f"{max(budget - before, 0)} minutes a week. If it can't reach its deadline in that, "
+                    "the verdict is impossible.")
+    return [problem]
 
 
 def _check_goal_plan(label: str, plan: GoalPlan, start: date, deadline: date) -> list[str]:
@@ -89,9 +123,7 @@ def _check_goal_plan(label: str, plan: GoalPlan, start: date, deadline: date) ->
     return problems
 
 
-def _check_budget(
-    ctx: PlanContext, changed: list[GoalPlan], new_tasks: list[tuple[int, TaskPlan]]
-) -> list[str]:
+def _check_budget(ctx: PlanContext, changed: list[GoalPlan], new_tasks: list[TaskPlan]) -> list[str]:
     """After the change, across all goals: no day over daily_hours, and every Monday–Sunday week keeps
     at least one free day (the user's admin day; the AI chooses which)."""
     changed_ids = {p.goal_id for p in changed}
@@ -108,7 +140,7 @@ def _check_budget(
     for plan in changed:
         for t in plan.tasks:
             per_day[t.day] += t.minutes
-    for _, t in new_tasks:
+    for t in new_tasks:
         per_day[t.day] += t.minutes
 
     limit = ctx.daily_hours * 60
