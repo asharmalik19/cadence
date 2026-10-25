@@ -136,52 +136,63 @@ def toggle_task(conn: sqlite3.Connection, task_id: int, done: bool) -> AppState:
 
 
 def next_day(conn: sqlite3.Connection, planner: Planner, body: NextDayIn) -> AppState:
-    """Close today: save the updates, count unticked tasks as missed, re-plan the goals that need it
-    from tomorrow on, and advance the day. Nothing to re-plan means no AI call. If planning fails,
-    nothing changes: same day, same ticks, updates not saved."""
+    """Close every day from the current day up to `to_day` (just today for Next day; several for Fast
+    forward): tick what the review ticked, save the updates, count the rest as missed, re-plan the goals
+    that need it from `to_day` on in one AI call, and move the day there. Nothing to re-plan means no
+    AI call. If planning fails, nothing changes: same day, same ticks, updates not saved."""
     settings = _settings(conn)
     today = settings.current_day
-    tomorrow = today + timedelta(days=1)
+    to_day = body.to_day or today + timedelta(days=1)
+    if to_day <= today:
+        raise Refused(f"Pick a date after {today:%a %d %b}.")
+    last_closed = to_day - timedelta(days=1)
+    days_closed = (to_day - today).days
     goals = db.goal_contexts(conn)
     updates = _clean_updates(body, {g.id for g in goals})
+    done_ids = _check_done_ids(body.done_task_ids, goals, today, to_day)
 
-    # The picture the planner sees: today closed, today's updates added.
+    # The picture the planner sees: the closed days settled, the updates added.
     reasons: dict[int, list[str]] = {}
     for g in goals:
         missed = False
         for t in g.tasks:
-            if t.day == today and t.status == "planned":
+            if t.id in done_ids:
+                t.status = "done"
+            elif t.day < to_day and t.status == "planned":
                 t.status = "missed"
                 missed = True
-        g.updates += [UpdateContext(day=today, text=text) for text in updates.get(g.id, [])]
-        if g.deadline < tomorrow:
+        g.updates += [UpdateContext(day=last_closed, text=text) for text in updates.get(g.id, [])]
+        if g.deadline < to_day:
             continue  # its time is over; nothing left to plan
         why = []
         if missed:
-            why.append("missed tasks today")
+            why.append("missed tasks today" if days_closed == 1 else
+                       f"missed tasks over the last {days_closed} days: the user was away and fast-forwarded")
         if g.id in updates:
             why.append("new update from the user")
-        if _detail_running_low(g, tomorrow):
+        if _detail_running_low(g, to_day):
             why.append(f"fewer than {DETAIL_DAYS // 2} days of daily tasks left: extend to {DETAIL_DAYS} days")
         if why:
             reasons[g.id] = why
 
     plans = []
     if reasons:
-        ctx = _replan_context(settings, tomorrow, goals, reasons)
+        ctx = _replan_context(settings, to_day, goals, reasons)
         plans = plan_checked(planner, ctx, "replan").goals
 
     with db.transaction(conn):
         for goal_id, texts in updates.items():
             for text in texts:
-                db.insert_update(conn, goal_id, today, text)
-        db.mark_missed(conn, today)
+                db.insert_update(conn, goal_id, last_closed, text)
+        for task_id in done_ids:
+            db.set_task_status(conn, task_id, "done")
+        db.mark_missed(conn, to_day)
         for plan in plans:
             db.replace_future_tasks(
-                conn, plan.goal_id, tomorrow, plan.tasks, plan.breakdown, plan.milestones, plan.change_note,
+                conn, plan.goal_id, to_day, plan.tasks, plan.breakdown, plan.milestones, plan.change_note,
                 plan.smart_goal,
             )
-        db.set_current_day(conn, tomorrow)
+        db.set_current_day(conn, to_day)
     return get_state(conn)
 
 
@@ -220,6 +231,17 @@ def _clean_updates(body: NextDayIn, goal_ids: set[int]) -> dict[int, list[str]]:
         if u.text.strip():
             updates.setdefault(u.goal_id, []).append(u.text.strip())
     return updates
+
+
+def _check_done_ids(ids: list[int], goals: list[GoalContext], today: date, to_day: date) -> set[int]:
+    """Ticks sent with the review may only be on the days being closed."""
+    days = {t.id: t.day for g in goals for t in g.tasks}
+    for task_id in ids:
+        if task_id not in days:
+            raise NotFound("That task no longer exists.")
+        if not today <= days[task_id] < to_day:
+            raise Refused("Only tasks on the days being closed can be ticked in the review.")
+    return set(ids)
 
 
 def _detail_running_low(goal: GoalContext, start: date) -> bool:

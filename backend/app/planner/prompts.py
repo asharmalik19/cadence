@@ -97,6 +97,10 @@ REPLAN = """Re-plan each goal listed in replan_goal_ids from the start day onwar
   fact and reshape the plan around it (e.g. a real deadline found: lead the milestones and tasks to
   it; an option dropped: drop its work). If the update changes the goal itself (e.g. "only Germany
   now"), rewrite smart_goal to match; otherwise repeat smart_goal unchanged.
+- "missed tasks over the last N days": the user was away and skipped ahead to the start day. Treat
+  the lost days as gone: don't cram them into the next few days. Re-plan realistically within the
+  daily hours and weekly budget, keep a free day every week, and say plainly in change_note whether
+  the deadline is still met; if it isn't, say what is at risk so the user can decide.
 - "fewer than 7 days of daily tasks left": extend the daily tasks to the full detail window, toward
   the next milestones.
 Return each re-planned goal's smart_goal, full breakdown, every milestone, and every task from the

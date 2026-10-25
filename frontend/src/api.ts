@@ -42,4 +42,6 @@ export const addUpdate = (goalId: number, text: string) => call<AppState>(`/goal
 
 export const toggleTask = (taskId: number, done: boolean) => call<AppState>(`/tasks/${taskId}/toggle`, { done })
 
-export const nextDay = (updates: DayUpdate[]) => call<AppState>('/day/next', { updates })
+/** Next day closes today; with `toDay` it fast-forwards, closing every day before it. */
+export const nextDay = (updates: DayUpdate[], toDay?: string, doneTaskIds?: number[]) =>
+  call<AppState>('/day/next', { updates, to_day: toDay ?? null, done_task_ids: doneTaskIds ?? [] })

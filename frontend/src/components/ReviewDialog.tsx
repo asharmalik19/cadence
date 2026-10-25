@@ -1,32 +1,58 @@
 import { useState, type FormEvent } from 'react'
 import type { ApiError } from '../api'
-import { formatLong } from '../dates'
+import { addDays, formatDay, formatLong } from '../dates'
 import type { DayUpdate, Goal, TodayTask } from '../types'
 import { ErrorNotice } from './ErrorNotice'
 import { PlanningIndicator } from './PlanningIndicator'
 import { TaskCard } from './TaskCard'
 
+export interface CloseDays {
+  updates: DayUpdate[]
+  /** Fast forward only: the day to land on, and the tasks ticked on the days being closed. */
+  toDay?: string
+  doneTaskIds?: number[]
+}
+
 interface Props {
   tasks: TodayTask[]
   goals: Goal[]
   currentDay: string
+  /** Set for Fast forward: the real date, which the date picker starts on. */
+  realToday?: string
   onToggle: (taskId: number, done: boolean) => Promise<void>
-  onConfirm: (updates: DayUpdate[]) => Promise<void>
+  onConfirm: (close: CloseDays) => Promise<void>
   onClose: () => void
 }
 
 /**
- * End of the day: tick anything you did but forgot, say what happened per goal (optional), then confirm.
- * Whatever is still unticked counts as missed, and goals with a miss or an update are re-planned.
+ * End of the day (or of several days, for Fast forward): tick anything you did but forgot, say what happened
+ * per goal (optional), then confirm. Whatever is still unticked counts as missed, and goals with a miss or an
+ * update are re-planned once.
  */
-export function ReviewDialog({ tasks, goals, currentDay, onToggle, onConfirm, onClose }: Props) {
+export function ReviewDialog({ tasks, goals, currentDay, realToday, onToggle, onConfirm, onClose }: Props) {
+  const forward = realToday !== undefined
+  const [toDay, setToDay] = useState(() =>
+    forward && realToday > currentDay ? realToday : addDays(currentDay, 1),
+  )
+  // Fast forward ticks stay here until Confirm: the skipped days aren't "today" yet, so they can't be ticked live.
+  const [ticked, setTicked] = useState<Set<number>>(new Set())
   // The tasks unticked when the review opened stay listed, so ticking one doesn't make it jump away.
-  const [reviewIds] = useState(() => new Set(tasks.filter((t) => t.status !== 'done').map((t) => t.id)))
+  const [reviewIds] = useState(() => {
+    const all = forward ? goals.flatMap((g) => g.tasks) : tasks
+    return new Set(all.filter((t) => t.status === 'planned').map((t) => t.id))
+  })
   const [updates, setUpdates] = useState<Record<number, string>>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<{ message: string; retry?: boolean } | null>(null)
 
-  const reviewTasks = tasks.filter((t) => reviewIds.has(t.id))
+  const reviewTasks: TodayTask[] = forward
+    ? goals
+        .flatMap((g) => g.tasks.map((t) => ({ ...t, goal_text: g.text })))
+        .filter((t) => reviewIds.has(t.id) && t.day >= currentDay && t.day < toDay)
+        .map((t) => (ticked.has(t.id) ? { ...t, status: 'done' as const } : t))
+        .sort((a, b) => a.day.localeCompare(b.day))
+    : tasks.filter((t) => reviewIds.has(t.id))
+  const days = [...new Set(reviewTasks.map((t) => t.day))]
   const stillUnticked = reviewTasks.filter((t) => t.status !== 'done').length
   const written = goals
     .map((g) => ({ goal_id: g.id, text: (updates[g.id] ?? '').trim() }))
@@ -35,6 +61,15 @@ export function ReviewDialog({ tasks, goals, currentDay, onToggle, onConfirm, on
 
   const toggle = async (taskId: number, done: boolean) => {
     setError(null)
+    if (forward) {
+      setTicked((prev) => {
+        const next = new Set(prev)
+        if (done) next.add(taskId)
+        else next.delete(taskId)
+        return next
+      })
+      return
+    }
     try {
       await onToggle(taskId, done)
     } catch (err) {
@@ -47,7 +82,8 @@ export function ReviewDialog({ tasks, goals, currentDay, onToggle, onConfirm, on
     setBusy(true)
     setError(null)
     try {
-      await onConfirm(written)
+      const doneTaskIds = reviewTasks.filter((t) => ticked.has(t.id)).map((t) => t.id)
+      await onConfirm(forward ? { updates: written, toDay, doneTaskIds } : { updates: written })
     } catch (err) {
       const apiError = err as ApiError
       setError({ message: apiError.message, retry: apiError.status !== 409 && apiError.status !== 404 })
@@ -56,25 +92,51 @@ export function ReviewDialog({ tasks, goals, currentDay, onToggle, onConfirm, on
     }
   }
 
+  const card = (t: TodayTask) => (
+    <TaskCard key={t.id} task={t} goalLabel={t.goal_text} onToggle={(done) => toggle(t.id, done)} />
+  )
+
   return (
     <div className="overlay">
       <form className="card dialog" onSubmit={confirm}>
         <div>
-          <div className="label">End of {formatLong(currentDay)}</div>
-          <h2 style={{ marginTop: 6 }}>Review your day</h2>
+          <div className="label">
+            {forward ? `Since ${formatLong(currentDay)}` : `End of ${formatLong(currentDay)}`}
+          </div>
+          <h2 style={{ marginTop: 6 }}>{forward ? 'Catch up to today' : 'Review your day'}</h2>
         </div>
+
+        {forward && (
+          <label className="field">
+            <span className="label">Fast forward to</span>
+            <input
+              type="date"
+              value={toDay}
+              min={addDays(currentDay, 1)}
+              onChange={(e) => e.target.value && setToDay(e.target.value)}
+              disabled={busy}
+            />
+          </label>
+        )}
 
         {reviewTasks.length > 0 ? (
           <section className="section">
             <p className="muted">Tick any you actually did. The rest are re-planned, nothing more.</p>
-            <div className="today-tasks">
-              {reviewTasks.map((t) => (
-                <TaskCard key={t.id} task={t} goalLabel={t.goal_text} onToggle={(done) => toggle(t.id, done)} />
-              ))}
-            </div>
+            {forward ? (
+              days.map((day) => (
+                <div key={day} className="review-day">
+                  <h3>{formatDay(day)}</h3>
+                  <div className="today-tasks">{reviewTasks.filter((t) => t.day === day).map(card)}</div>
+                </div>
+              ))
+            ) : (
+              <div className="today-tasks">{reviewTasks.map(card)}</div>
+            )}
           </section>
         ) : (
-          <p className="muted">Everything planned for today is ticked.</p>
+          <p className="muted">
+            {forward ? 'Nothing unticked on these days.' : 'Everything planned for today is ticked.'}
+          </p>
         )}
 
         {goals.length > 0 && (
@@ -82,8 +144,9 @@ export function ReviewDialog({ tasks, goals, currentDay, onToggle, onConfirm, on
             <div>
               <h3>Anything new?</h3>
               <p className="muted" style={{ marginTop: 4, fontSize: 14 }}>
-                Optional. Something you found out or changed your mind about, e.g. “DAAD deadline is 30 Nov” or
-                “dropping Dubai”. The plan follows it.
+                {forward
+                  ? 'Optional. What happened while you were away, e.g. “was sick for three days”, or anything you found out. The plan follows it.'
+                  : 'Optional. Something you found out or changed your mind about, e.g. “DAAD deadline is 30 Nov” or “dropping Dubai”. The plan follows it.'}
               </p>
             </div>
             {goals.map((g) => (
@@ -104,14 +167,18 @@ export function ReviewDialog({ tasks, goals, currentDay, onToggle, onConfirm, on
 
         <div className="dialog-actions">
           {busy ? (
-            <PlanningIndicator text={willReplan ? 'Re-planning…' : 'Moving to tomorrow…'} />
+            <PlanningIndicator text={willReplan ? 'Re-planning…' : forward ? 'Moving ahead…' : 'Moving to tomorrow…'} />
           ) : (
             <>
               <button type="button" className="btn-text" onClick={onClose}>
                 Not yet
               </button>
               <button type="submit" className="btn">
-                {willReplan ? 'Confirm and re-plan' : 'Confirm and start tomorrow'}
+                {willReplan
+                  ? 'Confirm and re-plan'
+                  : forward
+                    ? `Confirm and go to ${formatDay(toDay)}`
+                    : 'Confirm and start tomorrow'}
               </button>
             </>
           )}

@@ -8,6 +8,7 @@ import { PlanningIndicator } from './components/PlanningIndicator'
 import { ReviewDialog } from './components/ReviewDialog'
 import { Sidebar } from './components/Sidebar'
 import { TodayView } from './components/TodayView'
+import { toDay } from './dates'
 import type { AppState } from './types'
 
 /** Holds the app state from the backend and picks which screen to show. Decides nothing itself. */
@@ -17,7 +18,8 @@ export default function App() {
   // null = Today
   const [activeGoalId, setActiveGoalId] = useState<number | null>(null)
   const [adding, setAdding] = useState(false)
-  const [reviewing, setReviewing] = useState(false)
+  // 'day' = Next day's review; 'forward' = Fast forward over several days
+  const [reviewing, setReviewing] = useState<'day' | 'forward' | null>(null)
 
   const load = useCallback(async () => {
     setLoadError(null)
@@ -31,6 +33,14 @@ export default function App() {
   useEffect(() => {
     load()
   }, [load])
+
+  // The calendar date, for the Fast forward banner. Refreshed on focus so a tab left open overnight notices.
+  const [realToday, setRealToday] = useState(() => toDay(new Date()))
+  useEffect(() => {
+    const refresh = () => setRealToday(toDay(new Date()))
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
+  }, [])
 
   if (loadError) {
     return (
@@ -82,8 +92,10 @@ export default function App() {
           <TodayView
             tasks={state.today}
             currentDay={settings.current_day}
+            realToday={realToday}
             onToggle={toggle}
-            onNextDay={() => setReviewing(true)}
+            onNextDay={() => setReviewing('day')}
+            onFastForward={() => setReviewing('forward')}
           />
         ) : (
           <div className="welcome" style={{ marginTop: 64 }}>
@@ -106,12 +118,13 @@ export default function App() {
           tasks={state.today}
           goals={goals}
           currentDay={settings.current_day}
+          realToday={reviewing === 'forward' ? realToday : undefined}
           onToggle={toggle}
-          onConfirm={async (updates) => {
-            setState(await nextDay(updates))
-            setReviewing(false)
+          onConfirm={async ({ updates, toDay, doneTaskIds }) => {
+            setState(await nextDay(updates, toDay, doneTaskIds))
+            setReviewing(null)
           }}
-          onClose={() => setReviewing(false)}
+          onClose={() => setReviewing(null)}
         />
       )}
       {adding && (

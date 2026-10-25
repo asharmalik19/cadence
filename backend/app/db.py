@@ -198,9 +198,9 @@ def set_task_status(conn: sqlite3.Connection, task_id: int, status: str) -> None
     conn.execute("UPDATE tasks SET status = ? WHERE id = ?", (status, task_id))
 
 
-def mark_missed(conn: sqlite3.Connection, day: date) -> None:
-    """Whatever is still unticked on `day` counts as missed."""
-    conn.execute("UPDATE tasks SET status = 'missed' WHERE status = 'planned' AND day = ?", (day.isoformat(),))
+def mark_missed(conn: sqlite3.Connection, before: date) -> None:
+    """Whatever is still unticked on any day before `before` counts as missed."""
+    conn.execute("UPDATE tasks SET status = 'missed' WHERE status = 'planned' AND day < ?", (before.isoformat(),))
 
 
 def set_current_day(conn: sqlite3.Connection, day: date) -> None:

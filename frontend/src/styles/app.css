@@ -262,6 +262,20 @@ details > summary:hover { color: var(--text); }
 .today-view { display: flex; flex-direction: column; gap: 24px; }
 .today-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; }
 .today-tasks { display: flex; flex-direction: column; gap: 10px; }
+
+/* Fast forward: a calm nudge when the plan is behind the calendar, not a warning. */
+.ff-banner {
+  display: flex; justify-content: space-between; align-items: center; gap: 24px;
+  padding: 16px var(--pad-card);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--gold);
+  border-radius: var(--radius);
+}
+.ff-banner p { margin: 0; }
+.review-day { display: flex; flex-direction: column; gap: 10px; }
+.review-day + .review-day { margin-top: 16px; }
+.review-day h3 { color: var(--sage); }
 .task.tickable { display: grid; grid-template-columns: 26px 1fr; gap: 14px; align-items: start; }
 .task-main { min-width: 0; }
 .task-goal { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); margin-bottom: 4px; }

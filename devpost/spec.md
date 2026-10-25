@@ -16,7 +16,7 @@ SysPlanner is two programs on your laptop that talk to each other, plus one file
 
 The one idea to hold on to: **the AI proposes, the backend checks, the database remembers.** Every AI reply passes code rules (every task has a done criterion, an estimate and a why; no day goes over your daily hours; nothing runs past the deadline) before it is saved. If a reply breaks a rule, the backend asks once more, then shows a calm "planning failed, retry" message and changes nothing.
 
-Days are simulated. The app keeps its own "current day" in the database, starting on the real date of your first open, and **Next day** moves it forward by one.
+Days are simulated. The app keeps its own "current day" in the database, starting on the real date of your first open. **Next day** moves it forward by one; **Fast forward** jumps it to a chosen date (by default the real today) after one review of the skipped days.
 
 Why this shape and not something bigger: it's single-user and clone-and-run, so there are no accounts, no cloud database and no hosting. The only thing outside your laptop is the AI, because the AI is the product.
 
@@ -206,7 +206,7 @@ Today's tasks across all goals, each with its done criterion, minutes, why and a
 The goal, its SMART version and deadline, the breakdown into workstreams, the day-by-day plan (past days dimmed, today in gold), the **Last change** note, and the goal's updates with an "Anything new?" box (`UpdateBox.tsx`). PRD ref: `prd.md > The System (Breakdown + Day-by-Day Plan)`, `prd.md > Last Change Note`, `prd.md > Updates (What Happened)`.
 
 #### End-of-Day Review (`ReviewDialog.tsx`)
-Lists today's unticked tasks so you can tick any you actually did, plus an optional update box per goal, then **Confirm** to re-plan. PRD ref: `prd.md > Next Day, Review and Re-plan`, `prd.md > Updates (What Happened)`.
+Lists today's unticked tasks so you can tick any you actually did, plus an optional update box per goal, then **Confirm** to re-plan. In **Fast forward** mode (opened from `FastForwardBanner.tsx` on Today when the app's day is behind the real date) it adds a date picker (default: the real today) and lists the unticked tasks of every day up to that date, grouped by day; ticks on skipped days are kept locally and sent as `done_task_ids` with the confirm. PRD ref: `prd.md > Next Day, Review and Re-plan`, `prd.md > Updates (What Happened)`.
 
 #### Planning Indicator and Error Notice (`PlanningIndicator.tsx`, `ErrorNotice.tsx`)
 A quiet pulsing dot while the AI works. If it fails, a calm "Nothing was changed" card with **Try again**. PRD ref: `prd.md > States and Boundaries`.
@@ -341,7 +341,7 @@ Errors map to status codes: 409 for cap and precondition refusals, 404 for a goa
 | `POST /api/goals` | `{text, deadline, clarifications: [{question, answer}]}` | `{status:"impossible", message, smart_goal, assumptions}` or `{status:"added", goal_id, state}` | `prd.md > Adding a Goal`, `prd.md > Goal Cap`, `prd.md > The System (Breakdown + Day-by-Day Plan)` |
 | `DELETE /api/goals/{id}` | — | `AppState` (goal, its tasks and updates removed; no AI call) | `prd.md > Goal Cap` |
 | `POST /api/tasks/{id}/toggle` | `{done: bool}` | `AppState` | `prd.md > Today and Marking Done` |
-| `POST /api/day/next` | `{updates: [{goal_id, text}]}` | `AppState` | `prd.md > Next Day, Review and Re-plan`, `prd.md > Updates (What Happened)` |
+| `POST /api/day/next` | `{updates: [{goal_id, text}], to_day?: date, done_task_ids?: [int]}`. `to_day` defaults to the day after the current day (Next day); a later date is Fast forward. Every day before `to_day` is closed: `done_task_ids` are ticked, other planned tasks become missed, one re-plan runs from `to_day`. 409 if `to_day` isn't after the current day | `AppState` | `prd.md > Next Day, Review and Re-plan`, `prd.md > Updates (What Happened)` |
 | `POST /api/goals/{id}/updates` | `{text}` | `AppState` (after re-plan) | `prd.md > Updates (What Happened)` |
 
 `AppState` = `{settings: {daily_hours, current_day} | null, goals: [Goal with breakdown, tasks, last_change], today: [Task with goal_id/goal_text]}`. The frontend re-reads the whole state after every action. With at most 3 goals the state is small, and the screen can never drift from the database. `types.ts` mirrors these shapes by hand.

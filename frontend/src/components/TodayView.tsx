@@ -3,17 +3,20 @@ import type { ApiError } from '../api'
 import { formatLong, formatMinutes } from '../dates'
 import type { TodayTask } from '../types'
 import { ErrorNotice } from './ErrorNotice'
+import { FastForwardBanner } from './FastForwardBanner'
 import { TaskCard } from './TaskCard'
 
 interface Props {
   tasks: TodayTask[]
   currentDay: string
+  realToday: string
   onToggle: (taskId: number, done: boolean) => Promise<void>
   onNextDay: () => void
+  onFastForward: () => void
 }
 
 /** Today's tasks across all goals. You only ever tick wins; Next day handles the rest. */
-export function TodayView({ tasks, currentDay, onToggle, onNextDay }: Props) {
+export function TodayView({ tasks, currentDay, realToday, onToggle, onNextDay, onFastForward }: Props) {
   const [error, setError] = useState<string | null>(null)
   const done = tasks.filter((t) => t.status === 'done')
   const minutesLeft = tasks.filter((t) => t.status !== 'done').reduce((sum, t) => sum + t.minutes, 0)
@@ -29,6 +32,7 @@ export function TodayView({ tasks, currentDay, onToggle, onNextDay }: Props) {
 
   return (
     <div className="today-view">
+      <FastForwardBanner currentDay={currentDay} realToday={realToday} onFastForward={onFastForward} />
       <header className="today-head">
         <div>
           <div className="label">Today</div>

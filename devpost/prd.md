@@ -127,10 +127,14 @@ Source: `scope.md > The Core Loop` (Missed it?), `scope.md > The POC Boundary` (
 - Before advancing, an **end-of-day review** lists all still-unticked tasks so the user can tick any they did but forgot. This protects against needless re-plans.
 - After confirming, every task still unticked counts as missed, and the AI re-plans each affected goal from the next day on. A goal with no missed tasks is not re-planned.
 - The AI decides how much change is needed: a simple shift is a valid outcome.
+- **Fast forward.** Days away happen. When the app's day is behind the real date, Today shows "You're N days behind" with a **Fast forward** button. It opens the same review for every day from the app's day up to a chosen date (default: today; any later date works, which also serves the demo): unticked tasks grouped by day, plus an optional update per goal ("was sick", "travelling"). Confirming counts what's still unticked as missed and re-plans the affected goals once, from the chosen date, inside the daily hours and weekly budget. The weekly free day is kept: a gap is absorbed by re-planning, and if a deadline can't be met any more, the Last change note says so and the user decides (later deadline, smaller goal).
   - [ ] Clicking **Next day** with unticked tasks shows the review before anything changes.
   - [ ] Ticking a task in the review prevents it from triggering a re-plan.
   - [ ] After confirming, the main area shows the new day's tasks.
   - [ ] A goal's plan changes after a missed task, even if the change is only a shift.
+  - [ ] With the app's day behind the real date, Today shows how many days behind it is and a Fast forward button.
+  - [ ] Fast forward over several days lists every unticked task from those days in one review, makes one re-plan, and lands on the chosen date.
+  - [ ] Tasks ticked in that review count as done; every week after a fast forward still has a free day.
 
 ### Updates (What Happened)
 Source: `scope.md > The Unique Kernel` (adapts), decided during `5-build`.
@@ -194,7 +198,7 @@ Source: `scope.md > The Unique Kernel` (adapts), decided during `5-build`.
 - **Public hosted version:** clone-and-run with your own API key; `scope.md > Later`.
 - **Re-plan history beyond the last change:** only the latest note is kept visible.
 - **Feedback on a new system before committing to it:** a draft goal you refine with free-text feedback, then commit. Discussed in `4-spec` and deferred because the draft state complicated the cap, Next day and joint re-planning for the POC.
-- **Following the real date:** in the real app, Today reads the system date and shows that day's tasks, closing any days that passed since the last open. The POC keeps the simulated day and **Next day** so the build and demo can move through time (see **Non-Goals**). Decided during `5-build`.
+- **Following the real date automatically:** Today jumping to the system date by itself on open. The POC has an explicit **Fast forward** instead (see **Next Day, Review and Re-plan**), so the user confirms what they did first and the demo can still move through time. Decided during `5-build`.
 - **Adding goals in bulk:** bulk adds a second form and a messier feasibility check.
 - **Rebalancing goals when a new one doesn't fit:** rework existing plans by deadline and need, or by a priority the user picks, instead of offering only the leftover time. Deferred during `5-build` until real use shows it's needed.
 

@@ -239,3 +239,5 @@ class DayUpdate(UpdateIn):
 
 class NextDayIn(BaseModel):
     updates: list[DayUpdate] = Field(default_factory=list)
+    to_day: date | None = None  # None: the day after the current day (Next day). Later: Fast forward.
+    done_task_ids: list[int] = Field(default_factory=list)  # ticked in the review on the days being closed
