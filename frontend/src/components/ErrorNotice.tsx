@@ -9,7 +9,7 @@ export function ErrorNotice({ message, onRetry }: Props) {
     <div className="card error-notice" role="alert">
       <p>{message}</p>
       {onRetry && (
-        <button className="btn btn-quiet" onClick={onRetry}>
+        <button type="button" className="btn btn-quiet" onClick={onRetry}>
           Try again
         </button>
       )}

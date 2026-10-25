@@ -28,6 +28,7 @@ export function TaskCard({ task, goalLabel, onToggle }: Props) {
     <div className={`task ${task.status}${onToggle ? ' tickable' : ''}`}>
       {onToggle && (
         <button
+          type="button"
           className={`tick${done ? ' on' : ''}`}
           role="checkbox"
           aria-checked={done}

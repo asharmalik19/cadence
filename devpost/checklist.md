@@ -66,6 +66,7 @@ Build mode: learn
 
 ## Final Review
 
+- [x] Ticking a task in the review (Next day or Fast forward) submitted the whole review at once. The tick box and the Retry button had no `type`, so inside the review form they acted as submit buttons; both are now `type="button"`. Found in the browser test of Fast forward, fixed and retested: the tick shows, the dialog stays open, and confirm saves ticks and the update.
 - [ ] Final review complete — feedback resolved and learner confirms ready to ship
 
 ## Code Tour and App Map
