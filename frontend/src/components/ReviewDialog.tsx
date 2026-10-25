@@ -58,6 +58,7 @@ export function ReviewDialog({ tasks, goals, currentDay, realToday, onToggle, on
     .map((g) => ({ goal_id: g.id, text: (updates[g.id] ?? '').trim() }))
     .filter((u) => u.text.length > 0)
   const willReplan = stillUnticked > 0 || written.length > 0
+  const severalGoals = goals.length > 1
 
   const toggle = async (taskId: number, done: boolean) => {
     setError(null)
@@ -93,7 +94,13 @@ export function ReviewDialog({ tasks, goals, currentDay, realToday, onToggle, on
   }
 
   const card = (t: TodayTask) => (
-    <TaskCard key={t.id} task={t} goalLabel={t.goal_text} onToggle={(done) => toggle(t.id, done)} />
+    <TaskCard
+      key={t.id}
+      task={t}
+      goalLabel={severalGoals ? t.goal_text : undefined}
+      onToggle={(done) => toggle(t.id, done)}
+      compact
+    />
   )
 
   return (
@@ -108,7 +115,7 @@ export function ReviewDialog({ tasks, goals, currentDay, realToday, onToggle, on
 
         {forward && (
           <label className="field">
-            <span className="label">Fast forward to</span>
+            <span className="muted">Fast forward to</span>
             <input
               type="date"
               value={toDay}
@@ -121,7 +128,7 @@ export function ReviewDialog({ tasks, goals, currentDay, realToday, onToggle, on
 
         {reviewTasks.length > 0 ? (
           <section className="section">
-            <p className="muted">Tick any you actually did. The rest are re-planned, nothing more.</p>
+            <p className="muted">Tick what you did. The rest get re-planned.</p>
             {forward ? (
               days.map((day) => (
                 <div key={day} className="review-day">
@@ -141,22 +148,18 @@ export function ReviewDialog({ tasks, goals, currentDay, realToday, onToggle, on
 
         {goals.length > 0 && (
           <section className="section">
-            <div>
-              <h3>Anything new?</h3>
-              <p className="muted" style={{ marginTop: 4, fontSize: 14 }}>
-                {forward
-                  ? 'Optional. What happened while you were away, e.g. “was sick for three days”, or anything you found out. The plan follows it.'
-                  : 'Optional. Something you found out or changed your mind about, e.g. “DAAD deadline is 30 Nov” or “dropping Dubai”. The plan follows it.'}
-              </p>
-            </div>
+            <h3>
+              Anything new? <span className="muted review-optional">Optional</span>
+            </h3>
             {goals.map((g) => (
               <label key={g.id} className="field">
-                <span className="label">{g.text}</span>
+                {severalGoals && <span className="task-goal">{g.text}</span>}
                 <textarea
                   value={updates[g.id] ?? ''}
                   onChange={(e) => setUpdates((prev) => ({ ...prev, [g.id]: e.target.value }))}
                   disabled={busy}
-                  placeholder="Nothing new"
+                  aria-label={`What's new for ${g.text}`}
+                  placeholder={forward ? 'e.g. “was sick for three days”' : 'e.g. “the deadline moved to 30 Nov”'}
                 />
               </label>
             ))}

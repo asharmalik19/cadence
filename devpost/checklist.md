@@ -67,6 +67,8 @@ Build mode: learn
 ## Final Review
 
 - [x] Ticking a task in the review (Next day or Fast forward) submitted the whole review at once. The tick box and the Retry button had no `type`, so inside the review form they acted as submit buttons; both are now `type="button"`. Found in the browser test of Fast forward, fixed and retested: the tick shows, the dialog stays open, and confirm saves ticks and the update.
+- [ ] Task cards read as a wall of text. Show only the title, time and Done when; Why and Toward sit behind a Details toggle; no Explore badge; the goal name only when there is more than one goal, in normal case.
+- [ ] The review (Next day and Fast forward) is too dense. Each task is one short row (tick, title, time), with shorter hints and no repeated goal name when there is one goal.
 - [ ] Final review complete — feedback resolved and learner confirms ready to ship
 
 ## Code Tour and App Map

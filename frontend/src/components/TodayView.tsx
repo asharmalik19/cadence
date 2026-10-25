@@ -20,6 +20,7 @@ export function TodayView({ tasks, currentDay, realToday, onToggle, onNextDay, o
   const [error, setError] = useState<string | null>(null)
   const done = tasks.filter((t) => t.status === 'done')
   const minutesLeft = tasks.filter((t) => t.status !== 'done').reduce((sum, t) => sum + t.minutes, 0)
+  const severalGoals = new Set(tasks.map((t) => t.goal_id)).size > 1
 
   const toggle = async (taskId: number, isDone: boolean) => {
     setError(null)
@@ -54,7 +55,8 @@ export function TodayView({ tasks, currentDay, realToday, onToggle, onNextDay, o
 
       <div className="today-tasks">
         {tasks.map((t) => (
-          <TaskCard key={t.id} task={t} goalLabel={t.goal_text} onToggle={(isDone) => toggle(t.id, isDone)} />
+          <TaskCard key={t.id} task={t} goalLabel={severalGoals ? t.goal_text : undefined}
+            onToggle={(isDone) => toggle(t.id, isDone)} />
         ))}
       </div>
     </div>
