@@ -23,14 +23,14 @@ from .models import (
 )
 from .planner.base import Planner, PlanningFailed, get_planner
 
-log = logging.getLogger("sysplanner")
+log = logging.getLogger("cadence")
 
 FRONTEND_DIST = config.ROOT / "frontend" / "dist"
 
 
 def create_app(conn: sqlite3.Connection | None = None, planner: Planner | None = None) -> FastAPI:
     """Tests pass their own connection and planner; a normal start opens the data file and .env planner."""
-    app = FastAPI(title="SysPlanner")
+    app = FastAPI(title="Cadence")
     app.state.conn = conn or db.connect(config.DB_PATH)
     app.state.planner = planner
     if planner is None:

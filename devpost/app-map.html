@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SysPlanner — App Map</title>
+<title>Cadence — App Map</title>
 <style>
   :root { --bg: #17201b; --surface: #1f2a24; --border: #33433a; --text: #ece8dc; --sage: #a3ad9f; --gold: #c9a95b; }
   * { box-sizing: border-box; }
@@ -39,8 +39,8 @@
 </head>
 <body>
 <main>
-  <p class="muted">SysPlanner · App map</p>
-  <h1>How SysPlanner fits together</h1>
+  <p class="muted">Cadence · App map</p>
+  <h1>How Cadence fits together</h1>
   <p>You state a goal and a deadline. An AI asks what it needs, gives a verdict on the deadline, and builds a
     <strong>system</strong>: weekly hours per kind of work, dated milestones, and daily tasks with a done criterion.
     When you miss tasks or something changes, it re-plans and says what moved.</p>
@@ -57,7 +57,7 @@
     <div class="card"><h3>The checks</h3><p class="muted"><code>backend/app/validation.py</code></p>
       <p>Every AI reply is checked by code before it is saved: hours per day and week, a free day, deadlines.</p></div>
     <div class="card"><h3>The memory</h3><p class="muted"><code>backend/app/db.py</code></p>
-      <p>SQLite in <code>data/sysplanner.db</code>: settings, goals, tasks, updates.</p></div>
+      <p>SQLite in <code>data/cadence.db</code>: settings, goals, tasks, updates.</p></div>
   </div>
 
   <h2>One action, end to end: Next day</h2>

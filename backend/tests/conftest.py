@@ -2,7 +2,7 @@ import os
 import tempfile
 from datetime import date
 
-# Before anything imports the app: tests never touch data/sysplanner.db or call the real AI.
+# Before anything imports the app: tests never touch data/cadence.db or call the real AI.
 os.environ["DB_PATH"] = os.path.join(tempfile.mkdtemp(), "import-time.db")
 os.environ["AI_PROVIDER"] = "fake"
 

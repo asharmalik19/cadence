@@ -1,4 +1,4 @@
-# SysPlanner
+# Cadence
 
 Type a goal and a deadline. An AI asks what it needs to know, turns it into a SMART goal, tells you
 whether the deadline is realistic, and builds a system for it: a breakdown, milestones, and a
@@ -34,7 +34,7 @@ uv run uvicorn backend.app.main:app --port 8000
 
 Open http://localhost:8000.
 
-Your data lives in `data/sysplanner.db`. For a fresh start, stop the server and delete that file.
+Your data lives in `data/cadence.db`. For a fresh start, stop the server and delete that file.
 
 ## Try the demo
 

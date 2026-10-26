@@ -3,10 +3,10 @@ doc: prd
 status: approved
 ---
 
-# SysPlanner (working name) — Product Requirements
+# Cadence — Product Requirements
 
 A single-user web app for someone with ambitious, multi-week goals who drifts without a system. You enter a goal and a deadline, the AI builds the system and a right-sized day-by-day plan, you tick off what you get done, and the plan reshapes itself when you don't.
-Source: `scope.md > The Unique Kernel`, `scope.md > Who It's For`. "SysPlanner" is a working name; the learner wants to revisit it once the project is ready (see **Open Questions**).
+Source: `scope.md > The Unique Kernel`, `scope.md > Who It's For`. The app is named **Cadence** (working name was SysPlanner; see **Open Questions**).
 
 ## The Core Journey
 Source: `scope.md > The Core Loop`, `scope.md > What "Working" Looks Like`.
@@ -178,7 +178,7 @@ Source: `scope.md > The Unique Kernel` (adapts), decided during `5-build`.
 - **One daily hours number, entered at first open before any goal,** so the AI plans all goals against a known time limit. Changed from weekly during `5-build`: a weekly limit allowed lopsided days, and the learner plans day by day, deliberately below their real hours ("plan as if you have 40 hours") to keep a buffer and force priorities. Evenness is not required: deep days on one goal are preferred over a little of everything.
 - **A new goal gets the leftover time; existing plans don't change on add.** Changed during `5-build` (it was "adding a goal reworks existing plans"): the first live three-goal run showed the AI never reworked anything, and nothing checked the long-term plan, so three goals' breakdowns added up to 50 h a week against a 36 h budget. The learner chose leftover time plus a code-checked weekly budget: simple, predictable, and the total never exceeds their time. Smarter rebalancing (by deadline or by a priority the user picks) waits until real use shows it's needed.
 - **No bulk add.** Adding one at a time is simpler, and bulk would complicate the feasibility loop.
-- **Working name: SysPlanner,** to be revisited once the project is ready. Noted concerns: "sys" can read as IT jargon, and "planner" undersells that the tool does the planning.
+- **Name: Cadence** (chosen by the learner in `6-ship`; working name was SysPlanner). Earlier concerns with SysPlanner: "sys" can read as IT jargon, and "planner" undersells that the tool does the planning.
 
 ## What We're Building
 - Add goal with required deadline; AI clarifying questions; AI-written SMART goal; feasibility check with the impossible → change and retry loop.
@@ -217,4 +217,4 @@ Source: `scope.md > The Unique Kernel` (adapts), decided during `5-build`.
 
 ## Open Questions
 - **Data across sessions:** resolved in `spec.md`: everything is stored in a local SQLite file and survives restarts.
-- **Final app name:** working name is SysPlanner. **Reminder: revisit the name once the build is working, before `6-ship`.** Does not block spec.
+- **Final app name:** resolved — Cadence, chosen by the learner in `6-ship`. The name is common; check trademarks before any commercial use.

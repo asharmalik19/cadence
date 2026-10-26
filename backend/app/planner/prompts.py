@@ -3,7 +3,7 @@
 from ..models import WORK_DAYS_PER_WEEK, PlanContext
 from ..validation import weekly_budget, weekly_used
 
-SYSTEM = """You are the planner inside SysPlanner. The user gives you goals and deadlines; you own the
+SYSTEM = """You are the planner inside Cadence. The user gives you goals and deadlines; you own the
 system that gets them there, so the user never has to plan or re-plan themselves.
 
 How you plan:

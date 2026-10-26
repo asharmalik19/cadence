@@ -12,7 +12,7 @@ from ..models import Clarify, NewGoalPlan, PlanContext, Replan
 from .base import PlanningFailed
 from .prompts import SYSTEM, build_prompt
 
-log = logging.getLogger("sysplanner.gemini")
+log = logging.getLogger("cadence.gemini")
 
 
 class GeminiPlanner:

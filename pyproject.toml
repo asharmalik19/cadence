@@ -1,5 +1,5 @@
 [project]
-name = "sysplanner"
+name = "cadence"
 version = "0.1.0"
 description = "Type a goal and a deadline; an AI builds the system and re-plans it when you fall behind."
 requires-python = ">=3.12"

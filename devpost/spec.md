@@ -3,15 +3,15 @@ doc: spec
 status: approved
 ---
 
-# SysPlanner (working name) — Technical Spec
+# Cadence — Technical Spec
 
 ## How This Works, In Plain Language
 
-SysPlanner is two programs on your laptop that talk to each other, plus one file and one outside service.
+Cadence is two programs on your laptop that talk to each other, plus one file and one outside service.
 
 - **The backend** is a Python program built with **FastAPI**. It holds all the rules: the 3-goal cap, what counts as missed, when to re-plan. It is the only part that talks to the AI and the only part that reads and writes the data file.
 - **The frontend** is the screen you click on, written in **TypeScript with React**, and turned into something the browser can run by **Vite**. It shows the sidebar, Today, the Goal view and the dialogs. It never decides anything; it asks the backend and shows what comes back.
-- **The data file** is a **SQLite** database: one file on your laptop (`data/sysplanner.db`). Your daily hours, goals, breakdowns, every task and every tick live there, so closing the app loses nothing.
+- **The data file** is a **SQLite** database: one file on your laptop (`data/cadence.db`). Your daily hours, goals, breakdowns, every task and every tick live there, so closing the app loses nothing.
 - **The AI** is **Gemini**, reached through a small "planner" layer in the backend. Whenever a plan needs to be built or changed, the backend sends Gemini the full picture (your daily hours, today's date, every goal and its tasks, what you missed) and asks for the answer in a fixed shape. That shape is defined once in Python, so the backend can check the reply before trusting it. The planner layer has a slot for OpenAI too, but only Gemini is built.
 
 The one idea to hold on to: **the AI proposes, the backend checks, the database remembers.** Every AI reply passes code rules (every task has a done criterion, an estimate and a why; no day goes over your daily hours; nothing runs past the deadline) before it is saved. If a reply breaks a rule, the backend asks once more, then shows a calm "planning failed, retry" message and changes nothing.
@@ -104,7 +104,7 @@ cd frontend && npm run build && cd ..
 uv run uvicorn backend.app.main:app --port 8000   # open http://localhost:8000
 ```
 
-**Fresh start for a recording:** stop the server and delete `data/sysplanner.db`. The next start recreates it empty.
+**Fresh start for a recording:** stop the server and delete `data/cadence.db`. The next start recreates it empty.
 
 **Submission:** a short demo video plus a public GitHub repository are required. No deployment is planned (`prd.md > Deferred From the POC`: public hosted version). The demo follows `prd.md > The Core Journey > Success (the demo)`: daily hours → add the scholarship goal → add two more → refused on a 4th → tick some → leave one unticked → Next day → review → **Last change** note. AI calls take a while, so trim the waits in the edit.
 
@@ -145,7 +145,7 @@ flowchart LR
     S --> D["Store<br/>(reads/writes data)"]
   end
   P --> G[("Gemini")]
-  D --> F[("sysplanner.db")]
+  D --> F[("cadence.db")]
 ```
 
 | Piece | Its one job | Lives in |
@@ -272,7 +272,7 @@ AI reply shapes (Pydantic, in `backend/app/models.py`):
 How to read it: `backend/app/` is the rules, `backend/app/planner/` is the AI, `backend/tests/` proves the rules, and `frontend/src/components/` is one file per screen piece. Everything else is setup.
 
 ```
-sysplanner/
+cadence/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py            # FastAPI app, /api routes, serves frontend/dist
@@ -319,7 +319,7 @@ sysplanner/
 │           ├── ReviewDialog.tsx
 │           ├── PlanningIndicator.tsx
 │           └── ErrorNotice.tsx
-├── data/                      # sysplanner.db lives here (gitignored)
+├── data/                      # cadence.db lives here (gitignored)
 ├── devpost/                   # Devpost learning workspace
 ├── .env.example               # AI_PROVIDER=gemini, GEMINI_API_KEY=, GEMINI_MODEL=gemini-flash-latest
 ├── pyproject.toml
