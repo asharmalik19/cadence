@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SysPlanner — App Map</title>
+<style>
+  :root { --bg: #17201b; --surface: #1f2a24; --border: #33433a; --text: #ece8dc; --sage: #a3ad9f; --gold: #c9a95b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 48px 24px 80px; }
+  h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; font-weight: 600; line-height: 1.25; }
+  h1 { font-size: 34px; margin: 0 0 8px; }
+  h2 { font-size: 23px; margin: 44px 0 12px; }
+  h3 { font-size: 18px; margin: 0 0 6px; }
+  p, li { color: #d6d2c4; }
+  .muted { color: var(--sage); }
+  .gold { color: var(--gold); }
+  code { font: 14px ui-monospace, Menlo, monospace; background: #26332c; padding: 1px 6px; border-radius: 5px; color: var(--text); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+  .pieces { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .pieces .card p { margin: 4px 0 0; font-size: 15px; }
+  ol.route { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; counter-reset: stop; }
+  ol.route li { counter-increment: stop; position: relative; padding-left: 52px; }
+  ol.route li::before { content: counter(stop); position: absolute; left: 18px; top: 18px; width: 24px; height: 24px; border-radius: 50%;
+    background: var(--gold); color: var(--bg); font-weight: 700; font-size: 14px; display: grid; place-items: center; }
+  ol.route li p { margin: 6px 0 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--sage); font-weight: 500; }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; color: var(--gold); }
+  summary:focus-visible, a:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+  a { color: var(--gold); }
+  svg text { font-family: system-ui, -apple-system, sans-serif; }
+  pre { background: #26332c; border-radius: 8px; padding: 12px 14px; overflow-x: auto; font: 14px/1.5 ui-monospace, Menlo, monospace; }
+  footer { margin-top: 48px; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <p class="muted">SysPlanner · App map</p>
+  <h1>How SysPlanner fits together</h1>
+  <p>You state a goal and a deadline. An AI asks what it needs, gives a verdict on the deadline, and builds a
+    <strong>system</strong>: weekly hours per kind of work, dated milestones, and daily tasks with a done criterion.
+    When you miss tasks or something changes, it re-plans and says what moved.</p>
+  <p>One idea runs through all of it: <span class="gold">the AI proposes, the backend checks, the database remembers.</span></p>
+
+  <h2>The main pieces</h2>
+  <div class="pieces">
+    <div class="card"><h3>The screens</h3><p class="muted"><code>frontend/src/</code></p>
+      <p>React. Shows what the backend sends and passes on your clicks. It decides nothing itself.</p></div>
+    <div class="card"><h3>The rules</h3><p class="muted"><code>backend/app/services.py</code></p>
+      <p>FastAPI routes call these. Goal cap, what counts as missed, when to re-plan, all in one place.</p></div>
+    <div class="card"><h3>The planner</h3><p class="muted"><code>backend/app/planner/</code></p>
+      <p>Writes the prompt and calls Gemini. <code>fake.py</code> gives canned plans for tests and free clicking.</p></div>
+    <div class="card"><h3>The checks</h3><p class="muted"><code>backend/app/validation.py</code></p>
+      <p>Every AI reply is checked by code before it is saved: hours per day and week, a free day, deadlines.</p></div>
+    <div class="card"><h3>The memory</h3><p class="muted"><code>backend/app/db.py</code></p>
+      <p>SQLite in <code>data/sysplanner.db</code>: settings, goals, tasks, updates.</p></div>
+  </div>
+
+  <h2>One action, end to end: Next day</h2>
+  <p>You leave a task unticked, click <strong>Next day</strong> and confirm the review. A moment later the goal
+    shows a <strong>Last change</strong> note. Here is the trip that click takes.</p>
+
+  <svg viewBox="0 -14 820 264" width="100%" role="img" aria-labelledby="flow-title flow-desc">
+    <title id="flow-title">Next day flow</title>
+    <desc id="flow-desc">Review dialog sends a request to the next_day rule, which asks the planner, checks the reply with
+      check_plan, retries once if needed, saves to SQLite in one transaction, and returns the new state to the screen.</desc>
+    <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#c9a95b"/></marker></defs>
+    <g font-size="13" fill="#ece8dc">
+      <rect x="10" y="20" width="170" height="70" rx="10" fill="#1f2a24" stroke="#33433a"/>
+      <text x="95" y="48" text-anchor="middle" font-weight="600">Review dialog</text>
+      <text x="95" y="68" text-anchor="middle" fill="#a3ad9f">ReviewDialog.tsx</text>
+
+      <rect x="230" y="20" width="170" height="70" rx="10" fill="#1f2a24" stroke="#33433a"/>
+      <text x="315" y="48" text-anchor="middle" font-weight="600">next_day</text>
+      <text x="315" y="68" text-anchor="middle" fill="#a3ad9f">services.py</text>
+
+      <rect x="450" y="20" width="170" height="70" rx="10" fill="#1f2a24" stroke="#33433a"/>
+      <text x="535" y="48" text-anchor="middle" font-weight="600">Gemini planner</text>
+      <text x="535" y="68" text-anchor="middle" fill="#a3ad9f">planner/gemini.py</text>
+
+      <rect x="450" y="150" width="170" height="70" rx="10" fill="#1f2a24" stroke="#c9a95b"/>
+      <text x="535" y="178" text-anchor="middle" font-weight="600">check_plan</text>
+      <text x="535" y="198" text-anchor="middle" fill="#a3ad9f">validation.py</text>
+
+      <rect x="230" y="150" width="170" height="70" rx="10" fill="#1f2a24" stroke="#33433a"/>
+      <text x="315" y="178" text-anchor="middle" font-weight="600">SQLite</text>
+      <text x="315" y="198" text-anchor="middle" fill="#a3ad9f">db.py</text>
+
+      <rect x="650" y="85" width="160" height="70" rx="10" fill="#1f2a24" stroke="#33433a"/>
+      <text x="730" y="113" text-anchor="middle" font-weight="600">Retry once</text>
+      <text x="730" y="133" text-anchor="middle" fill="#a3ad9f">problems listed</text>
+    </g>
+    <g stroke="#c9a95b" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+      <path d="M180 55 H228"/>
+      <path d="M400 55 H448"/>
+      <path d="M535 90 V148"/>
+      <path d="M620 175 C660 175 700 170 715 157"/>
+      <path d="M700 85 C680 60 650 55 622 55"/>
+      <path d="M450 185 H402"/>
+      <path d="M260 150 C200 130 120 120 95 92"/>
+    </g>
+    <g font-size="12" fill="#a3ad9f">
+      <text x="205" y="6" text-anchor="middle">POST /api/day/next</text>
+      <text x="545" y="125">reply</text>
+      <text x="406" y="176">passes</text>
+      <text x="120" y="135">new state</text>
+    </g>
+  </svg>
+
+  <p class="muted">Reference route: the stops below were not toured step by step in the editor. Open them with your editor's search.</p>
+  <ol class="route">
+    <li class="card"><h3>The click: <code>frontend/src/components/ReviewDialog.tsx</code></h3>
+      <p>Search for <code>const confirm</code>. It gathers your ticks and updates and calls <code>onConfirm</code>.
+        In <code>frontend/src/App.tsx</code> that calls <code>nextDay</code> from <code>frontend/src/api.ts</code>, which sends
+        <code>POST /api/day/next</code>.</p></li>
+    <li class="card"><h3>The rules: <code>backend/app/services.py</code></h3>
+      <p>Search for <code>def next_day</code>. It marks unticked tasks as missed, writes down why each goal needs a
+        re-plan (missed tasks, a new update, or days away for Fast forward), and makes one AI call through
+        <code>plan_checked</code>. Nothing to re-plan means no AI call.</p></li>
+    <li class="card"><h3>The check and the save: <code>validation.py</code> → <code>db.py</code></h3>
+      <p><code>plan_checked</code> (same file, near the top) asks the planner, runs <code>check_plan</code> in
+        <code>backend/app/validation.py</code>, retries once with the problems listed, then gives up with an error.
+        Only a reply that passes is saved, all in one <code>db.transaction</code>, so a failed AI call changes nothing.
+        The new <code>change_note</code> becomes the Last change note on the goal page.</p></li>
+  </ol>
+  <details>
+    <summary>Where the proof lives</summary>
+    <p><code>backend/tests/test_fast_forward.py</code> runs this path with the fake planner. For example,
+      <code>test_ai_failure_leaves_day_ticks_and_updates_unchanged</code> shows a failed re-plan leaves the day,
+      ticks and updates as they were. Run all tests with <code>uv run pytest</code>.</p>
+  </details>
+
+  <h2>To change this, start here</h2>
+  <table>
+    <thead><tr><th>You want to change…</th><th>Start here</th></tr></thead>
+    <tbody>
+      <tr><td>What the AI is told (tone, rules, how it plans)</td><td><code>backend/app/planner/prompts.py</code>: <code>SYSTEM</code>, <code>NEW_GOAL</code>, <code>REPLAN</code></td></tr>
+      <tr><td>A rule the plan must obey (hours, free day, deadline)</td><td><code>backend/app/validation.py</code>: <code>check_plan</code>, <code>_check_budget</code>, <code>_check_weekly</code></td></tr>
+      <tr><td>When a re-plan happens, the goal cap, Fast forward</td><td><code>backend/app/services.py</code>: <code>next_day</code>, <code>add_goal</code></td></tr>
+      <tr><td>What a task card shows (Done when, Details toggle)</td><td><code>frontend/src/components/TaskCard.tsx</code></td></tr>
+      <tr><td>The goal page sections (Milestones, The system, Day by day)</td><td><code>frontend/src/components/GoalView.tsx</code>, <code>Breakdown.tsx</code>, <code>Milestones.tsx</code></td></tr>
+      <tr><td>Colours, spacing, fonts</td><td><code>frontend/src/styles/app.css</code></td></tr>
+      <tr><td>Which Gemini model</td><td><code>GEMINI_MODEL</code> in <code>.env</code> (read in <code>backend/app/config.py</code>)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>A practice to reuse</h2>
+  <div class="card">
+    <p><strong>Write the rule you care about as code, and don't trust the AI to follow it from the prompt alone.</strong></p>
+    <p>In slice 4, the prompt said all goals must fit your time. In the first live three-goal run, the AI's plans added up to
+      50 h a week against a 36 h budget, and nothing noticed. The fix was a check in code, <code>_check_weekly</code> in
+      <code>backend/app/validation.py</code>, plus a test that proves an overflowing plan is never saved:
+      <code>test_a_new_goal_that_overflows_the_week_is_not_saved</code> in
+      <code>backend/tests/test_goal_cap_and_shared_time.py</code>.</p>
+    <p>On any project that uses an AI, decide which promises must always hold (a budget, a format, a limit), check them in
+      code after every AI reply, and retry or refuse when they fail. The prompt tells the AI what you want; the check
+      makes sure you get it.</p>
+  </div>
+
+  <h2>Run it again</h2>
+<pre>cd frontend &amp;&amp; npm run build &amp;&amp; cd ..
+uv run uvicorn backend.app.main:app --port 8000
+# open http://localhost:8000</pre>
+  <p class="muted">Add <code>AI_PROVIDER=fake</code> before <code>uv run</code> to click through with canned plans and no API cost.
+    See <code>README.md</code> for setup.</p>
+
+  <footer class="muted">Snapshot of the code at commit <code>332b401</code>. The code can drift after this; trust the source over this page.</footer>
+</main>
+</body>
+</html>

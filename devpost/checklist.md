@@ -62,26 +62,27 @@ Build mode: learn
 ## Hands-on Checkpoints
 
 - [x] Early usable behavior explored — after slice 1 (plan quality: Flash vs. Pro, prompt changes) and after slice 2 (look and feel, plan display in the browser)
-- [ ] Final kick-the-tires exploration and feedback completed
+- [x] Final kick-the-tires exploration and feedback completed — the learner used the app on a fresh test database (`DB_PATH=data/review.db`): added a goal, ran Fast forward, and reviewed Today and the goal page
 
 ## Final Review
 
 - [x] Ticking a task in the review (Next day or Fast forward) submitted the whole review at once. The tick box and the Retry button had no `type`, so inside the review form they acted as submit buttons; both are now `type="button"`. Found in the browser test of Fast forward, fixed and retested: the tick shows, the dialog stays open, and confirm saves ticks and the update.
-- [ ] Task cards read as a wall of text. Show only the title, time and Done when; Why and Toward sit behind a Details toggle; no Explore badge; the goal name only when there is more than one goal, in normal case.
-- [ ] The review (Next day and Fast forward) is too dense. Each task is one short row (tick, title, time), with shorter hints and no repeated goal name when there is one goal.
-- [ ] Final review complete — feedback resolved and learner confirms ready to ship
+- [x] Task cards read as a wall of text. Show only the title, time and Done when; Why and Toward sit behind a Details toggle; no Explore badge; the goal name only when there is more than one goal, in normal case.
+- [x] The review (Next day and Fast forward) is too dense. Each task is one short row (tick, title, time), with shorter hints and no repeated goal name when there is one goal.
+- [x] Demo plan: one goal from an empty database (old data moved aside, not deleted), ending with a missed task, Next day and the Last change note. Multiple goals at most a sentence. No code change.
+- [x] Final review complete — feedback resolved and learner confirms ready to ship ("It does what I intended to do… the proof of concept is ready.")
 
 ## Code Tour and App Map
 
-- [ ] Learning activity complete — guided route, focused alternative, prior practice connected, or brief recap
-- [ ] Optional edit and transfer reflection addressed — offered/declined/already covered/not applicable as appropriate
-- [ ] `devpost/app-map.html` generated from finished code, checked, and shown, including a project-grounded practice to reuse
+- [x] Learning activity complete — guided route, focused alternative, prior practice connected, or brief recap
+- [x] Optional edit and transfer reflection addressed — offered/declined/already covered/not applicable as appropriate
+- [x] `devpost/app-map.html` generated from finished code, checked, and shown, including a project-grounded practice to reuse
 
-Activity and evidence: [what actually happened; real document/test/code references; unfinished work if interrupted]
-Route and stops: [actual paths and symbols; guided stops completed, or reference-only route]
-Edit outcome: [tried/kept/reverted/declined/not applicable; verification if changed]
-Reflection: [offered/answered/declined/already covered — personal answer belongs only in the ignored profile]
-Activity mode: [live app and editor, explicit static fallback, focused alternative, prior practice, or recap]
+Activity and evidence: brief recap through the app map, because the deadline is close and the learner moved straight to the demo. The recap ties the slice 4 discovery (live breakdowns totalled 50 h a week against a 36 h budget) to `_check_weekly` in `backend/app/validation.py` and `test_a_new_goal_that_overflows_the_week_is_not_saved`. During final review the learner also asked what the breakdown ("The system") and milestones are for; that was explained against `Breakdown.tsx` and the goal page.
+Route and stops: reference-only route in the map for Next day: `ReviewDialog.tsx` `confirm` → `services.py` `next_day` / `plan_checked` → `validation.py` `check_plan` → `db.py` `transaction`. Not toured in the editor.
+Edit outcome: not applicable; skipped for the deadline.
+Reflection: offered once, optional.
+Activity mode: recap.
 
 ## Revisions
 
